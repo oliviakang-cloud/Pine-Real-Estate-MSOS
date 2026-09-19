@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Local databases
+*.db
+*.sqlite3
+
+# Client data: real receipts, exports, and expense workbooks stay out of git
+uploads/
+receipts/
+exports/
+*.xlsx
+*.xls
+*.csv
+
+# Keep the test fixture, which is the one workbook the tests need
+!pine_tracker/sample_data/*.xlsx
+
+# Secrets
+.env
+.env.*

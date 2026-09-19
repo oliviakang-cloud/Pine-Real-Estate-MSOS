@@ -1,0 +1,8 @@
+SQLAlchemy>=2.0,<3.0
+openpyxl>=3.1
+pytest>=8.0
+
+# Add when the Flask app goes in:
+# Flask>=3.0
+# psycopg[binary]>=3.1
+# alembic>=1.13
