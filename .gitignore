@@ -17,9 +17,11 @@ exports/
 *.xlsx
 *.xls
 *.csv
+*.pdf
 
 # Keep the test fixture, which is the one workbook the tests need
 !pine_tracker/sample_data/*.xlsx
+!pine_tracker/sample_data/*.pdf
 
 # Secrets
 .env
