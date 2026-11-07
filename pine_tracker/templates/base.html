@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}Pine tracker{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<header class="bar">
+  <a class="wordmark" href="{{ url_for('properties') }}">Pine</a>
+  <nav>
+    <a href="{{ url_for('review') }}">Review</a>
+    {% if session.get('signed_in') %}
+    <form method="post" action="{{ url_for('sign_out') }}" class="inline">
+      <button class="linky" type="submit">Sign out</button>
+    </form>
+    {% endif %}
+  </nav>
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <ul class="flashes">
+    {% for category, message in messages %}
+    <li class="flash flash-{{ category }}">{{ message }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endwith %}
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+{% block actionbar %}{% endblock %}
+</body>
+</html>

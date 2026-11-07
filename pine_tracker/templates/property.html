@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.street }}{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <p class="crumb"><a href="{{ url_for('properties') }}">Properties</a></p>
+  <h1>{{ prop.street }}</h1>
+  <p class="lede">
+    {% if prop.city %}{{ prop.city }}{% if prop.state %}, {{ prop.state }}{% endif %} &middot; {% endif %}
+    {{ lines | length }} expense{{ '' if lines | length == 1 else 's' }} totaling <strong>{{ total | money }}</strong>
+  </p>
+</div>
+
+{% if by_category %}
+<table class="breakdown">
+  <caption>Where the money went</caption>
+  <tbody>
+  {% for category, amount in by_category %}
+    <tr>
+      <th scope="row">{{ category_labels.get(category, category) }}</th>
+      <td>{{ amount | money }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if lines %}
+<ol class="ledger">
+  {% for line in lines %}
+  <li>
+    <div class="entry">
+      <span class="ledger-name">
+        {{ line.description }}
+        <span class="sub">
+          {{ line.incurred_on | short_date }}
+          {%- if line.unit_id and units.get(line.unit_id) %} &middot; {{ units[line.unit_id].label }}{% endif %}
+          {%- if line.category != 'uncategorized' %} &middot; {{ category_labels.get(line.category, line.category) }}{% endif %}
+          {%- if line.treatment == 'capital' %} &middot; improvement{% endif %}
+        </span>
+        {% if line.needs_review %}<span class="flag">{{ line.review_note or 'Needs a look' }}</span>{% endif %}
+      </span>
+      <span class="ledger-amount">{{ line.amount_cents | money }}</span>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty">Nothing logged against this property yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block actionbar %}
+<div class="actionbar">
+  <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add an expense here</a>
+</div>
+{% endblock %}

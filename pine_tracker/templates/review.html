@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Review{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <h1>Needs a decision</h1>
+  <p class="lede">Imported lines the rules wouldn't guess at. Biggest first, since those move the tax return most.</p>
+</div>
+
+{% if lines %}
+{% for line in lines %}
+<form method="post" action="{{ url_for('review_resolve', line_id=line.id) }}" class="review-item">
+  <div class="entry">
+    <span class="ledger-name">
+      {{ line.description }}
+      <span class="sub">
+        {{ line.incurred_on | long_date }}
+        {%- if props.get(line.property_id) %} &middot; {{ props[line.property_id].street }}{% endif %}
+      </span>
+      {% if line.review_note %}<span class="flag">{{ line.review_note }}</span>{% endif %}
+    </span>
+    <span class="ledger-amount">{{ line.amount_cents | money }}</span>
+  </div>
+  <div class="row">
+    <select name="category" aria-label="Category">
+      {% for key, label in category_labels.items() %}
+      <option value="{{ key }}" {% if line.category == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="treatment" aria-label="Repair or improvement">
+      <option value="repair" {% if line.treatment == 'repair' %}selected{% endif %}>Repair</option>
+      <option value="capital" {% if line.treatment == 'capital' %}selected{% endif %}>Improvement</option>
+      <option value="undecided" {% if line.treatment == 'undecided' %}selected{% endif %}>Still deciding</option>
+    </select>
+    <button type="submit">Done</button>
+  </div>
+</form>
+{% endfor %}
+{% else %}
+<p class="empty">Nothing waiting. Every imported line has a category and a repair-or-improvement call.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Add an expense{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <h1>Add an expense</h1>
+  <p class="lede">Property, amount, and a few words are enough. The rest can wait.</p>
+</div>
+
+<form method="post" class="stack">
+  <label>
+    Property
+    <select name="property_id" required autofocus>
+      <option value="">Choose one</option>
+      {% for p in props %}
+      <option value="{{ p.id }}" {% if form.property_id == p.id | string %}selected{% endif %}>{{ p.street }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    Amount
+    <input type="text" inputmode="decimal" name="amount" value="{{ form.amount }}"
+           placeholder="48.62" required>
+  </label>
+
+  <label>
+    What was it
+    <input type="text" name="description" value="{{ form.description }}"
+           placeholder="Toilet flapper and wax ring" required>
+  </label>
+
+  <label>
+    Date
+    <input type="date" name="incurred_on" value="{{ form.incurred_on }}" required>
+  </label>
+
+  <details {% if form.unit_id or form.category or form.vendor_id %}open{% endif %}>
+    <summary>Add detail</summary>
+
+    <label>
+      Unit
+      <select name="unit_id">
+        <option value="">Whole property</option>
+        {% for u in units %}
+        <option value="{{ u.id }}" {% if form.unit_id == u.id | string %}selected{% endif %}>{{ u.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Category
+      <select name="category">
+        <option value="">Work it out from the description</option>
+        {% for key, label in categories.items() %}
+        <option value="{{ key }}" {% if form.category == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>
+      Repair or improvement
+      <select name="treatment">
+        <option value="">Decide later</option>
+        {% for key, label in treatments.items() %}
+        <option value="{{ key }}" {% if form.treatment == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    {% if vendors %}
+    <label>
+      Vendor
+      <select name="vendor_id">
+        <option value="">Not recorded</option>
+        {% for v in vendors %}
+        <option value="{{ v.id }}" {% if form.vendor_id == v.id | string %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+
+    {% if members %}
+    <label>
+      Paid by
+      <select name="paid_by_member_id">
+        <option value="">Not recorded</option>
+        {% for m in members %}
+        <option value="{{ m.id }}" {% if form.paid_by_member_id == m.id | string %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </details>
+
+  <button class="action" type="submit">Save expense</button>
+</form>
+{% endblock %}

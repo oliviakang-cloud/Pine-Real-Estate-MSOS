@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Properties{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <h1>Properties</h1>
+  <p class="lede">{{ year }} spending to date: <strong>{{ year_total | money }}</strong></p>
+  {% if review_count %}
+  <p class="lede"><a href="{{ url_for('review') }}">{{ review_count }} expense{{ '' if review_count == 1 else 's' }} need a category or a repair/improvement call.</a></p>
+  {% endif %}
+</div>
+
+{% if rows %}
+<ol class="ledger">
+  {% for prop, total in rows %}
+  <li>
+    <a href="{{ url_for('property_detail', property_id=prop.id) }}">
+      <span class="ledger-name">
+        {{ prop.street }}
+        {% if prop.city %}<span class="sub">{{ prop.city }}{% if prop.state %}, {{ prop.state }}{% endif %}</span>{% endif %}
+      </span>
+      <span class="ledger-amount{% if not total %} zero{% endif %}">{{ total | money }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty">No properties yet. Import a monthly workbook to load them, or add an expense and the property will be created with it.</p>
+{% endif %}
+{% endblock %}
+
+{% block actionbar %}
+<div class="actionbar">
+  <a class="action" href="{{ url_for('expense_new') }}">Add an expense</a>
+</div>
+{% endblock %}

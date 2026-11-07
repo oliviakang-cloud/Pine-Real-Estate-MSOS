@@ -1,18 +1,23 @@
-# Pine Tracker: data model and spreadsheet importer
+# Pine Tracker
 
-Step 1 of the build plan. The schema, plus a tool that loads the existing
+Expense and repair tracking for Pine Real Estate Management: a Flask app with
+a Schedule E-aware data model, plus a tool that loads the existing
 monthly expense workbooks into it so the app launches with real history.
 
 ## Files
 
 | File | What it is |
 | --- | --- |
+| `web.py` | Flask app: property list, property ledger, expense entry, review queue. |
+| `db.py` | Engine and session setup; rewrites Railway's `postgres://` URL. |
+| `templates/`, `static/` | HTML and CSS for the four screens. |
 | `models.py` | SQLAlchemy 2.0 models. Runs on PostgreSQL in production, SQLite in tests. |
 | `money.py` | Integer-cents helpers and the largest-remainder allocator. |
 | `formula.py` | Decomposes spreadsheet cell formulas into pre-tax amount + tax rate. |
 | `classify.py` | Address parsing, vendor extraction, Schedule E category rules. |
 | `import_expenses.py` | The importer and its CLI report. |
-| `tests/test_import.py` | 27 tests, including an end-to-end import of the real workbook. |
+| `tests/test_import.py` | Importer tests, including an end-to-end import of the real workbook. |
+| `tests/test_web.py` | Web tests driving real requests against real data. |
 | `sample_data/` | The September 2026 workbook, used as a test fixture. |
 
 ## Running it
@@ -101,3 +106,37 @@ three where it can and flags the rest.
 3. Receipt model is already in place; wire the upload plus vision extraction
    into a confirm screen, using `SkuItem` to learn SKU descriptions.
 4. Schedule E export grouped by entity, with repairs and capital separated.
+
+## Running the web app
+
+Local, against the SQLite file the importer writes:
+
+    pip install -r requirements.txt
+    flask --app wsgi init-db
+    python -m pine_tracker.import_expenses --file <workbook.xlsx> --db sqlite:///pine.db
+    flask --app wsgi run --debug
+
+Three screens so far:
+
+- `/` property list with year-to-date spending per property
+- `/property/<id>` that property's ledger plus a category breakdown
+- `/expense/new` mobile entry: property, amount, description, date, and an
+  optional detail section
+- `/review` the lines the importer flagged rather than guessed
+
+## Deploying to Railway
+
+1. Add a Postgres service. Railway sets `DATABASE_URL`; `db.py` rewrites the
+   `postgres://` prefix it hands out into the form SQLAlchemy 2 + psycopg 3 need.
+2. Set `SECRET_KEY` to a long random string and `APP_PASSWORD` to the password
+   Wei will use. Without `APP_PASSWORD` the app logs a warning and stays open to
+   anyone with the URL.
+3. The `Procfile` starts gunicorn, which is the start command Railpack was
+   looking for.
+4. After the first deploy, create the tables and load history:
+
+       flask --app wsgi init-db
+       python -m pine_tracker.import_expenses --file <workbook.xlsx> --db "$DATABASE_URL"
+
+`create_all` only adds missing tables. Once real data lives in Postgres, add
+Alembic so a column change doesn't mean rebuilding the database.
