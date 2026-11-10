@@ -11,6 +11,7 @@
   --mark: #14527a;   /* the one accent: actions and links */
   --flag: #8a5a00;   /* needs a human decision */
   --tap: 3rem;
+  --active-wash: #e8f0f6;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -201,16 +202,6 @@ button, .action {
 .review-item .row select { margin-top: 0; flex: 1 1 auto; }
 .review-item .row button { flex: 0 0 auto; }
 
-/* Sticky action bar --------------------------------------------------- */
-
-.actionbar {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  background: var(--paper);
-  border-top: 1px solid var(--line);
-}
-.actionbar .action { width: 100%; max-width: 34rem; margin: 0 auto; }
 
 /* Messages ------------------------------------------------------------ */
 
@@ -235,6 +226,7 @@ button, .action {
     --line: #2f3739;
     --mark: #6fb2e0;
     --flag: #d9a441;
+    --active-wash: #1d2830;
   }
   button, .action { color: #10181d; }
 }
@@ -317,4 +309,238 @@ button, .action {
   width: 1px; height: 1px;
   opacity: 0;
   overflow: hidden;
+}
+
+/* ======================================================================
+   Navigation: a real tab bar.
+   Bottom on phones, because that's where the thumb is and because the
+   active tab answers "where am I" without reading.
+   ====================================================================== */
+
+body.has-tabs {
+  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+.topbar {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 0.9rem 0 0.6rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.wordmark { font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em; }
+
+.tabs {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 20;
+}
+
+.tab {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.5rem 0.25rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  text-align: center;
+  /* The active marker sits on this border, so reserve it on every tab
+     and the labels never shift when you change tabs. */
+  border-top: 3px solid transparent;
+  margin-top: -1px;
+}
+
+.tab svg {
+  width: 22px; height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tab.is-active {
+  color: var(--mark);
+  border-top-color: var(--mark);
+  background: var(--active-wash);
+  font-weight: 650;
+}
+.tab.is-active svg { stroke-width: 2.2; }
+
+/* The one tab that creates something rather than navigating. */
+.tab-primary svg {
+  background: var(--mark);
+  stroke: var(--surface);
+  border-radius: 50%;
+  padding: 3px;
+}
+.tab-primary.is-active svg { background: var(--mark); }
+
+.badge {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  margin-left: 0.4rem;
+  min-width: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--mark);
+  color: var(--surface);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.1rem;
+  text-align: center;
+}
+.badge-flag { background: var(--flag); }
+
+/* ======================================================================
+   Clarity helpers
+   ====================================================================== */
+
+.ledger-right { display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+.chev { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+
+.totalline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0 0 0.5rem;
+  padding: 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.totalline strong { color: var(--ink); font-size: 1.05rem; }
+
+.hint {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.callout {
+  display: block;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--surface);
+  border-left: 3px solid var(--flag);
+  color: inherit;
+  text-decoration: none;
+}
+.callout strong { display: block; }
+
+.empty-state {
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-state strong { color: var(--ink); }
+.empty-state .action { margin-top: 0.75rem; }
+
+.actionrow { display: flex; gap: 0.5rem; margin: 0 0 1.5rem; }
+.actionrow .action { flex: 1 1 0; font-size: 0.9rem; padding: 0.6rem 0.5rem; }
+
+.action.wide { width: 100%; margin-top: 1rem; }
+.action.secondary {
+  background: transparent;
+  color: var(--mark);
+  border-color: var(--line);
+}
+
+.opt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.help {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.urgent {
+  color: var(--flag);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 650;
+}
+
+.inlinelabel { color: var(--muted); font-size: 0.85rem; align-self: center; }
+.statusrow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0 0 1.5rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.statusrow select { margin-top: 0; flex: 1 1 auto; }
+
+/* Open / finished switch */
+.switch {
+  display: flex;
+  margin: 0 0 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.switch-opt {
+  flex: 1 1 0;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  background: var(--surface);
+  font-size: 0.95rem;
+}
+.switch-opt.is-on {
+  background: var(--mark);
+  color: #fff;
+  font-weight: 650;
+}
+
+/* Wider screens: tabs move to the top, where they read as tabs. */
+@media (min-width: 46rem) {
+  body.has-tabs { padding-bottom: 2rem; }
+  .tabs {
+    position: static;
+    max-width: 34rem;
+    margin: 0 auto 1.5rem;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+  }
+  .tab {
+    flex-direction: row;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+    font-size: 0.9rem;
+    border-top: 0;
+    border-bottom: 3px solid transparent;
+    margin-top: 0;
+  }
+  .tab.is-active { border-bottom-color: var(--mark); }
+  .badge { position: static; margin-left: 0.15rem; }
 }

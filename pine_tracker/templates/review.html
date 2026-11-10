@@ -3,8 +3,8 @@
 
 {% block content %}
 <div class="headline">
-  <h1>Needs a decision</h1>
-  <p class="lede">Imported lines the rules wouldn't guess at. Biggest first, since those move the tax return most.</p>
+  <h1>To review</h1>
+  <p class="lede">Expenses missing a category, or a call on repair versus improvement. Biggest first, since those matter most at tax time.</p>
 </div>
 
 {% if lines %}
@@ -32,7 +32,7 @@
       <option value="capital" {% if line.treatment == 'capital' %}selected{% endif %}>Improvement</option>
       <option value="undecided" {% if line.treatment == 'undecided' %}selected{% endif %}>Still deciding</option>
     </select>
-    <button type="submit">Done</button>
+    <button type="submit">Save</button>
   </div>
 </form>
 {% endfor %}

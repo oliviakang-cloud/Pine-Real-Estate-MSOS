@@ -657,6 +657,58 @@ def create_app(database_url: Optional[str] = None) -> Flask:
         flash("Marked reviewed.", "ok")
         return redirect(url_for("review"))
 
+    # -- navigation context ------------------------------------------------
+
+    # Which endpoint belongs under which tab. Detail pages keep their parent
+    # tab lit, so you always know where you are.
+    TAB_FOR_ENDPOINT = {
+        "properties": "properties",
+        "property_detail": "properties",
+        "jobs": "repairs",
+        "job_detail": "repairs",
+        "job_new": "repairs",
+        "expense_new": "add",
+        "review": "review",
+        "review_resolve": "review",
+    }
+
+    @app.context_processor
+    def nav_context():
+        if request.endpoint in (None, "static", "sign_in", "media"):
+            return {"active_tab": None, "open_jobs": 0, "to_review": 0}
+
+        counts = {"open_jobs": 0, "to_review": 0}
+        try:
+            org = current_org()
+            counts["open_jobs"] = (
+                g.db.scalar(
+                    select(func.count())
+                    .select_from(Job)
+                    .where(
+                        Job.organization_id == org.id,
+                        Job.status.in_(list(JobStatus.OPEN_STATES)),
+                    )
+                )
+                or 0
+            )
+            counts["to_review"] = (
+                g.db.scalar(
+                    select(func.count())
+                    .select_from(ExpenseLine)
+                    .where(
+                        ExpenseLine.organization_id == org.id,
+                        ExpenseLine.needs_review.is_(True),
+                    )
+                )
+                or 0
+            )
+        except Exception:
+            # A badge is never worth a 500. If the count can't be read, show
+            # the tabs without it.
+            pass
+
+        return {"active_tab": TAB_FOR_ENDPOINT.get(request.endpoint), **counts}
+
     # -- template helpers --------------------------------------------------
 
     # strftime's "%-d" is a glibc extension and raises on Windows, so build

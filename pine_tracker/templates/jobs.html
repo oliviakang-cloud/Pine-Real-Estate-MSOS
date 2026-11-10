@@ -3,15 +3,13 @@
 
 {% block content %}
 <div class="headline">
-  <h1>{% if show_done %}Finished repairs{% else %}Open repairs{% endif %}</h1>
-  <p class="lede">
-    {{ jobs | length }} item{{ '' if jobs | length == 1 else 's' }} &middot;
-    {% if show_done %}
-      <a href="{{ url_for('jobs') }}">See what's open</a>
-    {% else %}
-      <a href="{{ url_for('jobs', show='done') }}">See what's finished</a>
-    {% endif %}
-  </p>
+  <h1>Repairs</h1>
+  <p class="lede">Everything you're tracking across all properties.</p>
+</div>
+
+<div class="switch" role="group" aria-label="Which repairs to show">
+  <a class="switch-opt{% if not show_done %} is-on{% endif %}" href="{{ url_for('jobs') }}">Open</a>
+  <a class="switch-opt{% if show_done %} is-on{% endif %}" href="{{ url_for('jobs', show='done') }}">Finished</a>
 </div>
 
 {% if jobs %}
@@ -20,26 +18,32 @@
   <li>
     <a href="{{ url_for('job_detail', job_id=job.id) }}">
       <span class="ledger-name">
-        {{ job.title }}
+        {% if job.priority == 1 %}<span class="urgent">Urgent</span> {% endif %}{{ job.title }}
         <span class="sub">
           {% if props.get(job.property_id) %}{{ props[job.property_id].street }}{% endif %}
           {%- if job.reported_on %} &middot; opened {{ job.reported_on | short_date }}{% endif %}
         </span>
       </span>
-      <span class="status status-{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</span>
+      <span class="ledger-right">
+        <span class="status status-{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
     </a>
   </li>
   {% endfor %}
 </ol>
+<p class="hint">Tap a repair to add photos, update its status, or see what it cost.</p>
 {% else %}
-<p class="empty">
-  {% if show_done %}Nothing finished yet.{% else %}Nothing open. Every repair is closed out.{% endif %}
-</p>
-{% endif %}
-{% endblock %}
-
-{% block actionbar %}
-<div class="actionbar">
-  <a class="action" href="{{ url_for('job_new') }}">Log a repair</a>
+<div class="empty-state">
+  {% if show_done %}
+  <p><strong>Nothing finished yet.</strong></p>
+  <p>Repairs you mark done will collect here.</p>
+  {% else %}
+  <p><strong>Nothing open.</strong></p>
+  <p>Every repair is closed out. Log a new one when something needs fixing.</p>
+  {% endif %}
 </div>
+{% endif %}
+
+<a class="action wide" href="{{ url_for('job_new') }}">Log a repair</a>
 {% endblock %}

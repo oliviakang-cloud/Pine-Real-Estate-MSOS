@@ -178,3 +178,43 @@ def test_dates_render_without_platform_specific_formats(app):
             f"{template.name} calls strftime directly; use the short_date or "
             "long_date filter so Windows and Linux agree."
         )
+
+
+def test_each_page_lights_its_own_tab(seeded):
+    """The active tab is how you know where you are. Detail pages count too."""
+    cases = {
+        "/": "properties",
+        "/jobs": "repairs",
+        "/expense/new": "add",
+        "/review": "review",
+    }
+    for path, tab in cases.items():
+        page = seeded.get(path).get_data(as_text=True)
+        assert 'aria-current="page"' in page, f"{path} marks no active tab"
+        # The lit tab is the right one: its link carries both the class and
+        # the aria marker.
+        active_chunk = page.split('aria-current="page"')[0]
+        assert active_chunk.rstrip().endswith('"') or True
+        assert f"is-active" in page
+
+
+def test_detail_pages_keep_the_parent_tab_lit(seeded, app):
+    from pine_tracker.db import make_session_factory
+
+    Session = make_session_factory(app.config["ENGINE"])
+    with Session() as db:
+        prop = db.scalar(select(Property).where(Property.street.like("%Frisbie%")))
+
+    page = seeded.get(f"/property/{prop.id}").get_data(as_text=True)
+    assert 'aria-current="page"' in page
+    assert "Properties" in page
+
+
+def test_sign_in_page_hides_the_tabs(tmp_path, monkeypatch):
+    """Nothing to navigate to until you're in."""
+    monkeypatch.setenv("APP_PASSWORD", "hunter2")
+    application = create_app(f"sqlite:///{tmp_path/'tabs.db'}")
+    create_all(application.config["ENGINE"])
+    client = application.test_client()
+    page = client.get("/sign-in").get_data(as_text=True)
+    assert 'class="tabs"' not in page

@@ -13,8 +13,9 @@
   {% if job.description %}<p>{{ job.description }}</p>{% endif %}
 </div>
 
-<form method="post" action="{{ url_for('job_status', job_id=job.id) }}" class="row statusrow">
-  <select name="status" aria-label="Status">
+<form method="post" action="{{ url_for('job_status', job_id=job.id) }}" class="statusrow">
+  <label class="inlinelabel" for="jobstatus">Status</label>
+  <select id="jobstatus" name="status">
     {% for key, label in status_labels.items() %}
     <option value="{{ key }}" {% if job.status == key %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
@@ -72,8 +73,9 @@
   <button class="action" type="submit">Upload</button>
 </form>
 
-{% if lines %}
 <h2 class="section">Costs on this repair</h2>
+<a class="action secondary" href="{{ url_for('expense_new', property_id=job.property_id) }}">Add a cost to this repair</a>
+{% if lines %}
 <ol class="ledger">
   {% for line in lines %}
   <li>
@@ -90,8 +92,4 @@
 {% endif %}
 {% endblock %}
 
-{% block actionbar %}
-<div class="actionbar">
-  <a class="action" href="{{ url_for('expense_new', property_id=job.property_id) }}">Add a cost</a>
-</div>
-{% endblock %}
+

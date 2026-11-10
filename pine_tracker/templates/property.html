@@ -11,6 +11,11 @@
   </p>
 </div>
 
+<div class="actionrow">
+  <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add expense here</a>
+  <a class="action secondary" href="{{ url_for('job_new', property_id=prop.id) }}">Log a repair</a>
+</div>
+
 {% if by_category %}
 <table class="breakdown">
   <caption>Where the money went</caption>
@@ -26,6 +31,7 @@
 {% endif %}
 
 {% if lines %}
+<h2 class="section">Expenses</h2>
 <ol class="ledger">
   {% for line in lines %}
   <li>
@@ -60,8 +66,4 @@
 {% endif %}
 {% endblock %}
 
-{% block actionbar %}
-<div class="actionbar">
-  <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add an expense here</a>
-</div>
-{% endblock %}
+{% block pageactions %}{% endblock %}

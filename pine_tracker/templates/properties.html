@@ -4,13 +4,22 @@
 {% block content %}
 <div class="headline">
   <h1>Properties</h1>
-  <p class="lede">{{ year }} spending to date: <strong>{{ year_total | money }}</strong></p>
-  {% if review_count %}
-  <p class="lede"><a href="{{ url_for('review') }}">{{ review_count }} expense{{ '' if review_count == 1 else 's' }} need a category or a repair/improvement call.</a></p>
-  {% endif %}
+  <p class="lede">What each property has cost you in {{ year }}.</p>
 </div>
 
+{% if review_count %}
+<a class="callout" href="{{ url_for('review') }}">
+  <strong>{{ review_count }} expense{{ '' if review_count == 1 else 's' }} need a decision</strong>
+  <span class="sub">Pick a category, and say whether it's a repair or an improvement.</span>
+</a>
+{% endif %}
+
 {% if rows %}
+<p class="totalline">
+  <span>{{ year }} total</span>
+  <strong>{{ year_total | money }}</strong>
+</p>
+
 <ol class="ledger">
   {% for prop, total in rows %}
   <li>
@@ -19,18 +28,20 @@
         {{ prop.street }}
         {% if prop.city %}<span class="sub">{{ prop.city }}{% if prop.state %}, {{ prop.state }}{% endif %}</span>{% endif %}
       </span>
-      <span class="ledger-amount{% if not total %} zero{% endif %}">{{ total | money }}</span>
+      <span class="ledger-right">
+        <span class="ledger-amount{% if not total %} zero{% endif %}">{{ total | money }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
     </a>
   </li>
   {% endfor %}
 </ol>
+<p class="hint">Tap a property to see its expenses and repairs.</p>
 {% else %}
-<p class="empty">No properties yet. Import a monthly workbook to load them, or add an expense and the property will be created with it.</p>
-{% endif %}
-{% endblock %}
-
-{% block actionbar %}
-<div class="actionbar">
-  <a class="action" href="{{ url_for('expense_new') }}">Add an expense</a>
+<div class="empty-state">
+  <p><strong>No properties yet.</strong></p>
+  <p>Add an expense and pick a property, or import a monthly workbook to load them all at once.</p>
+  <a class="action" href="{{ url_for('expense_new') }}">Add your first expense</a>
 </div>
+{% endif %}
 {% endblock %}

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="headline">
   <h1>Add an expense</h1>
-  <p class="lede">Property, amount, and a few words are enough. The rest can wait.</p>
+  <p class="lede">Four fields is all it takes. Everything else is optional.</p>
 </div>
 
 <form method="post" enctype="multipart/form-data" class="stack">
@@ -36,12 +36,13 @@
   </label>
 
   <label>
-    Receipt photo
+    Receipt photo <span class="opt">optional</span>
     <input type="file" name="receipt" accept="image/*,application/pdf" capture="environment">
+    <span class="help">Snap it now and it's filed against this property forever.</span>
   </label>
 
   <details {% if form.unit_id or form.category or form.vendor_id %}open{% endif %}>
-    <summary>Add detail</summary>
+    <summary>More detail <span class="opt">optional</span></summary>
 
     <label>
       Unit
@@ -56,7 +57,7 @@
     <label>
       Category
       <select name="category">
-        <option value="">Work it out from the description</option>
+        <option value="">Guess from the description</option>
         {% for key, label in categories.items() %}
         <option value="{{ key }}" {% if form.category == key %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
@@ -98,6 +99,7 @@
     {% endif %}
   </details>
 
-  <button class="action" type="submit">Save expense</button>
+  <button class="action wide" type="submit">Save expense</button>
+  <p class="help">Anything left blank lands in "To review" so you can finish it at a desk.</p>
 </form>
 {% endblock %}
