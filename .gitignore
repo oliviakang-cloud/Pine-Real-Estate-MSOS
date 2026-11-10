@@ -24,3 +24,4 @@ exports/
 # Secrets
 .env
 .env.*
+media/

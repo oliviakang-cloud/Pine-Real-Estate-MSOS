@@ -39,6 +39,16 @@
           {%- if line.treatment == 'capital' %} &middot; improvement{% endif %}
         </span>
         {% if line.needs_review %}<span class="flag">{{ line.review_note or 'Needs a look' }}</span>{% endif %}
+        {% if receipts.get(line.receipt_id) %}
+        <a class="receiptlink" href="{{ url_for('media', key=receipts[line.receipt_id]) }}">View receipt</a>
+        {% else %}
+        <form method="post" action="{{ url_for('expense_receipt', line_id=line.id) }}"
+              enctype="multipart/form-data" class="receiptform">
+          <input type="file" name="receipt" accept="image/*,application/pdf" capture="environment"
+                 id="r{{ line.id }}" onchange="this.form.submit()">
+          <label class="receiptbtn" for="r{{ line.id }}">Add receipt</label>
+        </form>
+        {% endif %}
       </span>
       <span class="ledger-amount">{{ line.amount_cents | money }}</span>
     </div>

@@ -20,6 +20,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session as flask_session,
     url_for,
 )
@@ -30,14 +31,35 @@ from .db import create_all, make_engine, make_session_factory
 from .models import (
     CostTreatment,
     ExpenseLine,
+    Job,
+    JobStatus,
     Member,
     Organization,
+    Photo,
+    PhotoKind,
     Property,
+    Receipt,
     ScheduleE,
     Unit,
     Vendor,
 )
 from .money import fmt, to_cents
+from .storage import UploadError, resolve, save_upload
+
+JOB_STATUS_LABELS = {
+    JobStatus.REPORTED: "Reported",
+    JobStatus.PARTS_ORDERED: "Parts ordered",
+    JobStatus.SCHEDULED: "Scheduled",
+    JobStatus.IN_PROGRESS: "In progress",
+    JobStatus.DONE: "Done",
+    JobStatus.CANCELLED: "Cancelled",
+}
+
+PHOTO_KIND_LABELS = {
+    PhotoKind.BEFORE_REPAIR: "Before",
+    PhotoKind.AFTER_REPAIR: "After",
+    PhotoKind.GENERAL: "Note",
+}
 
 CATEGORY_LABELS = {
     ScheduleE.ADVERTISING: "Advertising",
@@ -216,11 +238,23 @@ def create_app(database_url: Optional[str] = None) -> Flask:
         for line in lines:
             by_category[line.category] = by_category.get(line.category, 0) + line.amount_cents
 
+        receipt_ids = {line.receipt_id for line in lines if line.receipt_id}
+        receipts = {}
+        if receipt_ids:
+            receipts = {
+                r.id: r.image_key
+                for r in g.db.scalars(
+                    select(Receipt).where(Receipt.id.in_(receipt_ids))
+                ).all()
+                if r.image_key
+            }
+
         return render_template(
             "property.html",
             prop=prop,
             lines=lines,
             units=units,
+            receipts=receipts,
             total=sum(line.amount_cents for line in lines),
             by_category=sorted(by_category.items(), key=lambda kv: -kv[1]),
             category_labels=CATEGORY_LABELS,
@@ -305,6 +339,19 @@ def create_app(database_url: Optional[str] = None) -> Flask:
                     needs_review=not form["category"] and guess.needs_review,
                     review_note=None if form["category"] else guess.review_note,
                 )
+                key = _store(request.files.get("receipt"), "receipts")
+                if key:
+                    receipt = Receipt(
+                        organization_id=org.id,
+                        vendor_id=line.vendor_id,
+                        purchased_on=incurred,
+                        total_cents=amount_cents,
+                        image_key=key,
+                    )
+                    g.db.add(receipt)
+                    g.db.flush()
+                    line.receipt_id = receipt.id
+
                 g.db.add(line)
                 g.db.commit()
                 flash(f"Saved {fmt(amount_cents)}.", "ok")
@@ -322,6 +369,250 @@ def create_app(database_url: Optional[str] = None) -> Flask:
             categories=CATEGORY_LABELS,
             treatments=TREATMENT_LABELS,
         )
+
+    # -- media -------------------------------------------------------------
+
+    @app.get("/media/<path:key>")
+    @login_required
+    def media(key: str):
+        """Serve an uploaded file.
+
+        Behind the password gate on purpose: these are photos of Wei's
+        properties and his receipts, and the keys are random rather than
+        guessable, but the gate is what actually keeps them private.
+        """
+        try:
+            path = resolve(key)
+        except UploadError:
+            abort(404)
+        if not path.is_file():
+            abort(404)
+        return send_file(path, max_age=60 * 60 * 24 * 30)
+
+    def _store(file_storage, prefix: str) -> Optional[str]:
+        """Save an optional uploaded file, flashing anything the user can fix."""
+        if file_storage is None or not file_storage.filename:
+            return None
+        try:
+            key, _ = save_upload(file_storage.stream, file_storage.filename, prefix)
+            return key
+        except UploadError as problem:
+            flash(str(problem), "error")
+            return None
+
+    # -- repair jobs -------------------------------------------------------
+
+    @app.get("/jobs")
+    @login_required
+    def jobs():
+        org = current_org()
+        show_done = request.args.get("show") == "done"
+
+        query = select(Job).where(Job.organization_id == org.id)
+        if show_done:
+            query = query.where(Job.status.in_([JobStatus.DONE, JobStatus.CANCELLED]))
+        else:
+            query = query.where(Job.status.in_(list(JobStatus.OPEN_STATES)))
+
+        items = g.db.scalars(
+            query.order_by(Job.priority, Job.reported_on.desc(), Job.id.desc())
+        ).all()
+        props = {
+            p.id: p
+            for p in g.db.scalars(
+                select(Property).where(Property.organization_id == org.id)
+            ).all()
+        }
+        return render_template(
+            "jobs.html",
+            jobs=items,
+            props=props,
+            show_done=show_done,
+            status_labels=JOB_STATUS_LABELS,
+        )
+
+    @app.route("/jobs/new", methods=["GET", "POST"])
+    @login_required
+    def job_new():
+        org = current_org()
+        props = g.db.scalars(
+            select(Property)
+            .where(Property.organization_id == org.id, Property.active.is_(True))
+            .order_by(Property.street)
+        ).all()
+        units = g.db.scalars(
+            select(Unit).where(Unit.organization_id == org.id).order_by(Unit.label)
+        ).all()
+
+        form = {
+            "property_id": request.args.get("property_id", ""),
+            "unit_id": "",
+            "title": "",
+            "description": "",
+            "priority": "3",
+        }
+
+        if request.method == "POST":
+            form.update({k: request.form.get(k, "").strip() for k in form})
+            if not form["property_id"] or not form["title"]:
+                flash("A property and a short title are needed.", "error")
+            else:
+                job = Job(
+                    organization_id=org.id,
+                    property_id=int(form["property_id"]),
+                    unit_id=int(form["unit_id"]) if form["unit_id"] else None,
+                    title=form["title"],
+                    description=form["description"] or None,
+                    status=JobStatus.REPORTED,
+                    priority=int(form["priority"] or 3),
+                    reported_on=dt.date.today(),
+                )
+                g.db.add(job)
+                g.db.commit()
+
+                key = _store(request.files.get("photo"), "jobs")
+                if key:
+                    g.db.add(
+                        Photo(
+                            organization_id=org.id,
+                            property_id=job.property_id,
+                            unit_id=job.unit_id,
+                            job_id=job.id,
+                            kind=PhotoKind.BEFORE_REPAIR,
+                            caption=request.form.get("caption", "").strip() or None,
+                            taken_at=dt.datetime.now(dt.timezone.utc),
+                            image_key=key,
+                        )
+                    )
+                    g.db.commit()
+                return redirect(url_for("job_detail", job_id=job.id))
+
+        return render_template("job_form.html", form=form, props=props, units=units)
+
+    @app.get("/jobs/<int:job_id>")
+    @login_required
+    def job_detail(job_id: int):
+        org = current_org()
+        job = g.db.get(Job, job_id)
+        if job is None or job.organization_id != org.id:
+            abort(404)
+
+        photos = g.db.scalars(
+            select(Photo)
+            .where(Photo.job_id == job.id)
+            .order_by(Photo.taken_at, Photo.id)
+        ).all()
+        lines = g.db.scalars(
+            select(ExpenseLine)
+            .where(ExpenseLine.job_id == job.id)
+            .order_by(ExpenseLine.incurred_on)
+        ).all()
+
+        return render_template(
+            "job.html",
+            job=job,
+            prop=g.db.get(Property, job.property_id),
+            unit=g.db.get(Unit, job.unit_id) if job.unit_id else None,
+            photos=photos,
+            lines=lines,
+            spent=sum(line.amount_cents for line in lines),
+            status_labels=JOB_STATUS_LABELS,
+            kind_labels=PHOTO_KIND_LABELS,
+        )
+
+    @app.post("/jobs/<int:job_id>/photo")
+    @login_required
+    def job_photo(job_id: int):
+        org = current_org()
+        job = g.db.get(Job, job_id)
+        if job is None or job.organization_id != org.id:
+            abort(404)
+
+        key = _store(request.files.get("photo"), "jobs")
+        if key:
+            kind = request.form.get("kind", PhotoKind.GENERAL)
+            g.db.add(
+                Photo(
+                    organization_id=org.id,
+                    property_id=job.property_id,
+                    unit_id=job.unit_id,
+                    job_id=job.id,
+                    kind=kind if kind in PhotoKind.ALL else PhotoKind.GENERAL,
+                    caption=request.form.get("caption", "").strip() or None,
+                    taken_at=dt.datetime.now(dt.timezone.utc),
+                    image_key=key,
+                )
+            )
+            g.db.commit()
+            flash("Photo added.", "ok")
+        return redirect(url_for("job_detail", job_id=job.id))
+
+    @app.post("/jobs/<int:job_id>/status")
+    @login_required
+    def job_status(job_id: int):
+        org = current_org()
+        job = g.db.get(Job, job_id)
+        if job is None or job.organization_id != org.id:
+            abort(404)
+
+        status = request.form.get("status", "")
+        if status in JobStatus.ALL:
+            job.status = status
+            if status == JobStatus.DONE and not job.completed_on:
+                job.completed_on = dt.date.today()
+            if status in JobStatus.OPEN_STATES:
+                job.completed_on = None
+            g.db.commit()
+            flash(f"Marked {JOB_STATUS_LABELS[status].lower()}.", "ok")
+        return redirect(url_for("job_detail", job_id=job.id))
+
+    @app.post("/photo/<int:photo_id>/caption")
+    @login_required
+    def photo_caption(photo_id: int):
+        org = current_org()
+        photo = g.db.get(Photo, photo_id)
+        if photo is None or photo.organization_id != org.id:
+            abort(404)
+        photo.caption = request.form.get("caption", "").strip() or None
+        kind = request.form.get("kind")
+        if kind in PhotoKind.ALL:
+            photo.kind = kind
+        g.db.commit()
+        return redirect(
+            url_for("job_detail", job_id=photo.job_id)
+            if photo.job_id
+            else url_for("properties")
+        )
+
+    # -- receipt photo on an existing expense ------------------------------
+
+    @app.post("/expense/<int:line_id>/receipt")
+    @login_required
+    def expense_receipt(line_id: int):
+        org = current_org()
+        line = g.db.get(ExpenseLine, line_id)
+        if line is None or line.organization_id != org.id:
+            abort(404)
+
+        key = _store(request.files.get("receipt"), "receipts")
+        if key:
+            receipt = g.db.get(Receipt, line.receipt_id) if line.receipt_id else None
+            if receipt is None:
+                receipt = Receipt(
+                    organization_id=org.id,
+                    vendor_id=line.vendor_id,
+                    purchased_on=line.incurred_on,
+                    total_cents=line.amount_cents,
+                    image_key=key,
+                )
+                g.db.add(receipt)
+                g.db.flush()
+                line.receipt_id = receipt.id
+            else:
+                receipt.image_key = key
+            g.db.commit()
+            flash("Receipt attached.", "ok")
+        return redirect(url_for("property_detail", property_id=line.property_id))
 
     # -- review queue ------------------------------------------------------
 
@@ -381,6 +672,7 @@ def create_app(database_url: Optional[str] = None) -> Flask:
     app.jinja_env.filters["short_date"] = short_date
     app.jinja_env.filters["long_date"] = long_date
     app.jinja_env.globals["category_label"] = lambda key: CATEGORY_LABELS.get(key, key)
+    app.jinja_env.globals["job_status_label"] = lambda key: JOB_STATUS_LABELS.get(key, key)
 
     # -- CLI ---------------------------------------------------------------
 

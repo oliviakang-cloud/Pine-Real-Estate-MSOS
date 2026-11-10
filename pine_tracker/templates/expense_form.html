@@ -7,7 +7,7 @@
   <p class="lede">Property, amount, and a few words are enough. The rest can wait.</p>
 </div>
 
-<form method="post" class="stack">
+<form method="post" enctype="multipart/form-data" class="stack">
   <label>
     Property
     <select name="property_id" required autofocus>
@@ -33,6 +33,11 @@
   <label>
     Date
     <input type="date" name="incurred_on" value="{{ form.incurred_on }}" required>
+  </label>
+
+  <label>
+    Receipt photo
+    <input type="file" name="receipt" accept="image/*,application/pdf" capture="environment">
   </label>
 
   <details {% if form.unit_id or form.category or form.vendor_id %}open{% endif %}>
