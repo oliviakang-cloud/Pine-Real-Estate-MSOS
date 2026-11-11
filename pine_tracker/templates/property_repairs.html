@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.street }} repairs{% endblock %}
+
+{% block content %}
+{% include "_property_nav.html" %}
+
+<div class="switch" role="group" aria-label="Which repairs to show">
+  <a class="switch-opt{% if not show_done %} is-on{% endif %}"
+     href="{{ url_for('property_repairs', property_id=prop.id) }}">Open</a>
+  <a class="switch-opt{% if show_done %} is-on{% endif %}"
+     href="{{ url_for('property_repairs', property_id=prop.id, show='done') }}">Finished</a>
+</div>
+
+{% if jobs %}
+<ol class="ledger">
+  {% for job in jobs %}
+  <li>
+    <a href="{{ url_for('job_detail', job_id=job.id) }}">
+      <span class="ledger-name">
+        {% if job.priority == 1 %}<span class="urgent">Urgent</span> {% endif %}{{ job.title }}
+        <span class="sub">
+          {%- if job.reported_on %}opened {{ job.reported_on | short_date }}{% endif %}
+          {%- if job.completed_on %} &middot; finished {{ job.completed_on | short_date }}{% endif %}
+        </span>
+      </span>
+      <span class="ledger-right">
+        <span class="status status-{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<div class="empty-state">
+  <p><strong>{% if show_done %}Nothing finished yet.{% else %}Nothing open here.{% endif %}</strong></p>
+</div>
+{% endif %}
+
+<a class="action wide" href="{{ url_for('job_new', property_id=prop.id) }}">Log a repair here</a>
+{% endblock %}

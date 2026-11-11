@@ -67,9 +67,14 @@ def test_property_page_lists_its_own_expenses(seeded, app):
     with Session() as db:
         prop = db.scalar(select(Property).where(Property.street.like("%Frisbie%")))
 
-    page = seeded.get(f"/property/{prop.id}").get_data(as_text=True)
-    assert "Unit 5" in page or "Unit 1" in page
-    assert "Where the money went" in page
+    overview = seeded.get(f"/property/{prop.id}").get_data(as_text=True)
+    assert "Unit 5" in overview or "Unit 1" in overview
+    # The overview summarizes; the breakdown lives on the Expenses sub-tab.
+    assert "Spent here" in overview
+    assert "Recent expenses" in overview
+
+    expenses = seeded.get(f"/property/{prop.id}/expenses").get_data(as_text=True)
+    assert "Where the money went" in expenses
 
 
 def test_missing_property_is_404(client):
@@ -174,7 +179,9 @@ def test_dates_render_without_platform_specific_formats(app):
 
     source_dir = Path(__file__).resolve().parents[1] / "templates"
     for template in source_dir.glob("*.html"):
-        assert "strftime" not in template.read_text(), (
+        # encoding is explicit on purpose: Windows defaults to cp1252 and
+        # chokes on any non-ASCII character in a template.
+        assert "strftime" not in template.read_text(encoding="utf-8"), (
             f"{template.name} calls strftime directly; use the short_date or "
             "long_date filter so Windows and Linux agree."
         )
@@ -218,3 +225,27 @@ def test_sign_in_page_hides_the_tabs(tmp_path, monkeypatch):
     client = application.test_client()
     page = client.get("/sign-in").get_data(as_text=True)
     assert 'class="tabs"' not in page
+
+
+def test_everything_about_a_property_is_reachable_from_it(seeded, app):
+    """The point of the property-centered layout: one address, four views."""
+    from pine_tracker.db import make_session_factory
+
+    Session = make_session_factory(app.config["ENGINE"])
+    with Session() as db:
+        prop = db.scalar(select(Property).where(Property.street.like("%Frisbie%")))
+
+    overview = seeded.get(f"/property/{prop.id}").get_data(as_text=True)
+    for section in ["Overview", "Expenses", "Repairs", "Rent"]:
+        assert f">{section}" in overview or f"{section}<" in overview
+
+    for path in ["", "/expenses", "/repairs", "/rent"]:
+        page = seeded.get(f"/property/{prop.id}{path}")
+        assert page.status_code == 200, path
+        # Each sub-page marks itself current, so you know which view you're in.
+        assert 'aria-current="page"' in page.get_data(as_text=True)
+
+
+def test_property_subpages_reject_another_orgs_property(client):
+    for path in ["", "/expenses", "/repairs", "/rent"]:
+        assert client.get(f"/property/9999{path}").status_code == 404

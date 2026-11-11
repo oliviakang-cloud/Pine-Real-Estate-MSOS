@@ -323,9 +323,6 @@ button, .action {
    active tab answers "where am I" without reading.
    ====================================================================== */
 
-body.has-tabs {
-  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
-}
 
 .topbar {
   max-width: 34rem;
@@ -338,34 +335,36 @@ body.has-tabs {
 .wordmark { font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em; }
 
 .tabs {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
   display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  z-index: 20;
+  max-width: 34rem;
+  margin: 0 auto 1.25rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 
 .tab {
   position: relative;
-  flex: 1 1 0;
-  min-height: 3.5rem;
+  flex: 1 1 auto;
+  min-width: 4.5rem;
+  min-height: 3rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.15rem;
-  padding: 0.5rem 0.25rem;
+  padding: 0.4rem 0.3rem;
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.1;
   text-align: center;
-  /* The active marker sits on this border, so reserve it on every tab
-     and the labels never shift when you change tabs. */
-  border-top: 3px solid transparent;
-  margin-top: -1px;
+  white-space: nowrap;
+  /* The active marker rides this border, so reserve it on every tab and
+     nothing shifts when you switch. */
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
 }
 
 .tab svg {
@@ -379,7 +378,7 @@ body.has-tabs {
 
 .tab.is-active {
   color: var(--mark);
-  border-top-color: var(--mark);
+  border-bottom-color: var(--mark);
   background: var(--active-wash);
   font-weight: 650;
 }
@@ -396,18 +395,18 @@ body.has-tabs {
 
 .badge {
   position: absolute;
-  top: 0.35rem;
+  top: 0.2rem;
   left: 50%;
-  margin-left: 0.4rem;
-  min-width: 1.1rem;
-  padding: 0 0.25rem;
+  margin-left: 0.55rem;
+  min-width: 1.05rem;
+  padding: 0 0.22rem;
   border-radius: 999px;
   background: var(--mark);
   color: var(--surface);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-style: normal;
   font-weight: 650;
-  line-height: 1.1rem;
+  line-height: 1.05rem;
   text-align: center;
 }
 .badge-flag { background: var(--flag); }
@@ -529,28 +528,7 @@ body.has-tabs {
 
 /* Wider screens: tabs move to the top, where they read as tabs. */
 @media (min-width: 46rem) {
-  body.has-tabs { padding-bottom: 2rem; }
-  .tabs {
-    position: static;
-    max-width: 34rem;
-    margin: 0 auto 1.5rem;
-    border-top: 0;
-    border-bottom: 1px solid var(--line);
-    background: transparent;
-  }
-  .tab {
-    flex-direction: row;
-    gap: 0.4rem;
-    min-height: 2.75rem;
-    font-size: 0.9rem;
-    border-top: 0;
-    border-bottom: 3px solid transparent;
-    margin-top: 0;
-  }
-  .tab.is-active { border-bottom-color: var(--mark); }
-  .badge { position: static; margin-left: 0.15rem; }
-}
-
+  
 /* ======================================================================
    Rent
    ====================================================================== */
@@ -608,3 +586,75 @@ body.has-tabs {
 .paymentform { margin-bottom: 1.5rem; }
 .pair { display: flex; gap: 0.6rem; }
 .pair label { flex: 1 1 0; }
+
+/* ======================================================================
+   Property sub-navigation and overview cards
+   ====================================================================== */
+
+.subtabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.25rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+
+.subtab {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0 0.6rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.subtab.is-on {
+  color: var(--ink);
+  font-weight: 650;
+  border-bottom-color: var(--ink);
+}
+
+.pip {
+  min-width: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--mark);
+  color: var(--surface);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.15rem;
+  text-align: center;
+}
+.pip-flag { background: var(--late); }
+
+/* Overview cards: three numbers that each lead somewhere. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0 0 1.5rem;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.card-value { font-size: 1.15rem; font-weight: 650; line-height: 1.1; }
+.card-value.is-flag { color: var(--late); }
+.card-label { color: var(--muted); font-size: 0.78rem; line-height: 1.2; }
+
+.totalrow th, .totalrow td { font-weight: 650; }

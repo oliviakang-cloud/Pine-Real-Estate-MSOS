@@ -213,35 +213,43 @@ def create_app(database_url: Optional[str] = None) -> Flask:
 
     # -- one property ------------------------------------------------------
 
-    @app.get("/property/<int:property_id>")
-    @login_required
-    def property_detail(property_id: int):
+    def _property_or_404(property_id: int):
         org = current_org()
         prop = g.db.get(Property, property_id)
         if prop is None or prop.organization_id != org.id:
             abort(404)
+        return org, prop
 
+    def _property_counts(org_id: int, prop):
+        """The numbers that badge a property's own sub-tabs."""
+        open_repairs = g.db.scalar(
+            select(func.count()).select_from(Job).where(
+                Job.organization_id == org_id,
+                Job.property_id == prop.id,
+                Job.status.in_(list(JobStatus.OPEN_STATES)),
+            )
+        ) or 0
+        period = rentlib.period_start(dt.date.today())
+        leases = [
+            row for row in _lease_rows(org_id, period)
+            if row["unit"] and row["unit"].property_id == prop.id
+        ]
+        return {
+            "open_repairs": open_repairs,
+            "leases": leases,
+            "rent_unsettled": sum(1 for r in leases if not r["status"].is_settled),
+        }
+
+    def _property_expenses(org_id: int, prop, limit: int = 200):
         lines = g.db.scalars(
             select(ExpenseLine)
             .where(
-                ExpenseLine.organization_id == org.id,
+                ExpenseLine.organization_id == org_id,
                 ExpenseLine.property_id == prop.id,
             )
             .order_by(ExpenseLine.incurred_on.desc(), ExpenseLine.id.desc())
-            .limit(200)
+            .limit(limit)
         ).all()
-
-        units = {
-            u.id: u
-            for u in g.db.scalars(
-                select(Unit).where(Unit.property_id == prop.id)
-            ).all()
-        }
-
-        by_category: dict[str, int] = {}
-        for line in lines:
-            by_category[line.category] = by_category.get(line.category, 0) + line.amount_cents
-
         receipt_ids = {line.receipt_id for line in lines if line.receipt_id}
         receipts = {}
         if receipt_ids:
@@ -252,25 +260,116 @@ def create_app(database_url: Optional[str] = None) -> Flask:
                 ).all()
                 if r.image_key
             }
+        return lines, receipts
 
-        period = rentlib.period_start(dt.date.today())
-        leases = [
-            row
-            for row in _lease_rows(org.id, period)
-            if row["unit"] and row["unit"].property_id == prop.id
-        ]
+    @app.get("/property/<int:property_id>")
+    @login_required
+    def property_detail(property_id: int):
+        """Overview: the answer to "how is this place doing" in one screen."""
+        org, prop = _property_or_404(property_id)
+        counts = _property_counts(org.id, prop)
+
+        lines, receipts = _property_expenses(org.id, prop)
+        by_category: dict[str, int] = {}
+        for line in lines:
+            by_category[line.category] = by_category.get(line.category, 0) + line.amount_cents
+
+        units = g.db.scalars(
+            select(Unit).where(Unit.property_id == prop.id).order_by(Unit.label)
+        ).all()
+
+        recent_jobs = g.db.scalars(
+            select(Job)
+            .where(Job.organization_id == org.id, Job.property_id == prop.id,
+                   Job.status.in_(list(JobStatus.OPEN_STATES)))
+            .order_by(Job.priority, Job.id.desc())
+            .limit(3)
+        ).all()
 
         return render_template(
             "property.html",
             prop=prop,
+            section="overview",
+            units=units,
+            lines=lines[:5],
+            receipts=receipts,
+            total=sum(line.amount_cents for line in lines),
+            by_category=sorted(by_category.items(), key=lambda kv: -kv[1])[:6],
+            category_labels=CATEGORY_LABELS,
+            recent_jobs=recent_jobs,
+            job_status_labels=JOB_STATUS_LABELS,
+            rent_labels=rentlib.STATUS_LABELS,
+            **counts,
+        )
+
+    @app.get("/property/<int:property_id>/expenses")
+    @login_required
+    def property_expenses(property_id: int):
+        org, prop = _property_or_404(property_id)
+        lines, receipts = _property_expenses(org.id, prop)
+        units = {
+            u.id: u
+            for u in g.db.scalars(select(Unit).where(Unit.property_id == prop.id)).all()
+        }
+        by_category: dict[str, int] = {}
+        for line in lines:
+            by_category[line.category] = by_category.get(line.category, 0) + line.amount_cents
+
+        return render_template(
+            "property_expenses.html",
+            prop=prop,
+            section="expenses",
             lines=lines,
             units=units,
             receipts=receipts,
-            leases=leases,
-            rent_labels=rentlib.STATUS_LABELS,
             total=sum(line.amount_cents for line in lines),
             by_category=sorted(by_category.items(), key=lambda kv: -kv[1]),
             category_labels=CATEGORY_LABELS,
+            **_property_counts(org.id, prop),
+        )
+
+    @app.get("/property/<int:property_id>/repairs")
+    @login_required
+    def property_repairs(property_id: int):
+        org, prop = _property_or_404(property_id)
+        show_done = request.args.get("show") == "done"
+        states = (
+            [JobStatus.DONE, JobStatus.CANCELLED]
+            if show_done
+            else list(JobStatus.OPEN_STATES)
+        )
+        items = g.db.scalars(
+            select(Job)
+            .where(
+                Job.organization_id == org.id,
+                Job.property_id == prop.id,
+                Job.status.in_(states),
+            )
+            .order_by(Job.priority, Job.id.desc())
+        ).all()
+        return render_template(
+            "property_repairs.html",
+            prop=prop,
+            section="repairs",
+            jobs=items,
+            show_done=show_done,
+            status_labels=JOB_STATUS_LABELS,
+            **_property_counts(org.id, prop),
+        )
+
+    @app.get("/property/<int:property_id>/rent")
+    @login_required
+    def property_rent(property_id: int):
+        org, prop = _property_or_404(property_id)
+        counts = _property_counts(org.id, prop)
+        period = rentlib.period_start(dt.date.today())
+        return render_template(
+            "property_rent.html",
+            prop=prop,
+            section="rent",
+            period_label=rentlib.period_label(period),
+            rent_labels=rentlib.STATUS_LABELS,
+            **counts,
         )
 
     # -- add an expense ----------------------------------------------------
@@ -971,6 +1070,9 @@ def create_app(database_url: Optional[str] = None) -> Flask:
     TAB_FOR_ENDPOINT = {
         "properties": "properties",
         "property_detail": "properties",
+        "property_expenses": "properties",
+        "property_repairs": "properties",
+        "property_rent": "properties",
         "jobs": "repairs",
         "job_detail": "repairs",
         "job_new": "repairs",

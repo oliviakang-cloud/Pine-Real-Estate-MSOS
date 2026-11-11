@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.street }} rent{% endblock %}
+
+{% block content %}
+{% include "_property_nav.html" %}
+
+<h2 class="section">{{ period_label }}</h2>
+
+{% if leases %}
+<ol class="ledger">
+  {% for row in leases %}
+  <li>
+    <a href="{{ url_for('rent_lease', lease_id=row.lease.id) }}">
+      <span class="ledger-name">
+        {{ row.tenant.name if row.tenant else 'Tenant' }}
+        <span class="sub">
+          {% if row.unit and row.unit.label != 'Main' %}{{ row.unit.label }} &middot; {% endif %}
+          {{ row.status.received_cents | money }} of {{ row.status.expected_cents | money }}
+          {%- if row.status.is_split %} &middot; {{ row.status.payment_count }} payments{% endif %}
+        </span>
+        {% if row.status.balance_cents > 0 %}
+        <span class="sub owing-note">{{ row.status.balance_cents | money }} short</span>
+        {% endif %}
+      </span>
+      <span class="ledger-right">
+        <span class="status rent-{{ row.status.status }}">{{ rent_labels[row.status.status] }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+<p class="hint">Tap a tenant to record a payment or see past months.</p>
+{% else %}
+<div class="empty-state">
+  <p><strong>No tenants on this property yet.</strong></p>
+  <p>Add one and each month will track itself.</p>
+</div>
+{% endif %}
+
+<a class="action wide" href="{{ url_for('lease_new') }}">Add a tenant</a>
+{% endblock %}

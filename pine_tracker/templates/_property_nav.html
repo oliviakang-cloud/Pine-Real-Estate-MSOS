@@ -1,0 +1,27 @@
+{# Sub-navigation inside one property. Everything about this address is
+   reachable from here, which is the point: you pick the place first, then
+   what you want to see. #}
+<div class="headline">
+  <p class="crumb"><a href="{{ url_for('properties') }}">← All properties</a></p>
+  <h1>{{ prop.street }}</h1>
+  {% if prop.city %}<p class="lede">{{ prop.city }}{% if prop.state %}, {{ prop.state }}{% endif %}</p>{% endif %}
+</div>
+
+<nav class="subtabs" aria-label="This property">
+  <a class="subtab{% if section == 'overview' %} is-on{% endif %}"
+     href="{{ url_for('property_detail', property_id=prop.id) }}"
+     {% if section == 'overview' %}aria-current="page"{% endif %}>Overview</a>
+  <a class="subtab{% if section == 'expenses' %} is-on{% endif %}"
+     href="{{ url_for('property_expenses', property_id=prop.id) }}"
+     {% if section == 'expenses' %}aria-current="page"{% endif %}>Expenses</a>
+  <a class="subtab{% if section == 'repairs' %} is-on{% endif %}"
+     href="{{ url_for('property_repairs', property_id=prop.id) }}"
+     {% if section == 'repairs' %}aria-current="page"{% endif %}>
+    Repairs{% if open_repairs %} <em class="pip">{{ open_repairs }}</em>{% endif %}
+  </a>
+  <a class="subtab{% if section == 'rent' %} is-on{% endif %}"
+     href="{{ url_for('property_rent', property_id=prop.id) }}"
+     {% if section == 'rent' %}aria-current="page"{% endif %}>
+    Rent{% if rent_unsettled %} <em class="pip pip-flag">{{ rent_unsettled }}</em>{% endif %}
+  </a>
+</nav>

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.street }} expenses{% endblock %}
+
+{% block content %}
+{% include "_property_nav.html" %}
+
+<a class="action wide" href="{{ url_for('expense_new', property_id=prop.id) }}">Add expense</a>
+
+{% if by_category %}
+<table class="breakdown">
+  <caption>Where the money went</caption>
+  <tbody>
+  {% for category, amount in by_category %}
+    <tr>
+      <th scope="row">{{ category_labels.get(category, category) }}</th>
+      <td>{{ amount | money }}</td>
+    </tr>
+  {% endfor %}
+    <tr class="totalrow"><th scope="row">Total</th><td>{{ total | money }}</td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if lines %}
+<ol class="ledger">
+  {% for line in lines %}
+  <li>
+    <div class="entry">
+      <span class="ledger-name">
+        {{ line.description }}
+        <span class="sub">
+          {{ line.incurred_on | short_date }}
+          {%- if line.unit_id and units.get(line.unit_id) %} &middot; {{ units[line.unit_id].label }}{% endif %}
+          {%- if line.category != 'uncategorized' %} &middot; {{ category_labels.get(line.category, line.category) }}{% endif %}
+          {%- if line.treatment == 'capital' %} &middot; improvement{% endif %}
+        </span>
+        {% if line.needs_review %}<span class="flag">{{ line.review_note or 'Needs a look' }}</span>{% endif %}
+        {% if receipts.get(line.receipt_id) %}
+        <a class="receiptlink" href="{{ url_for('media', key=receipts[line.receipt_id]) }}">View receipt</a>
+        {% else %}
+        <form method="post" action="{{ url_for('expense_receipt', line_id=line.id) }}"
+              enctype="multipart/form-data" class="receiptform">
+          <input type="file" name="receipt" accept="image/*,application/pdf" capture="environment"
+                 id="r{{ line.id }}" onchange="this.form.submit()">
+          <label class="receiptbtn" for="r{{ line.id }}">Add receipt</label>
+        </form>
+        {% endif %}
+      </span>
+      <span class="ledger-amount">{{ line.amount_cents | money }}</span>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<div class="empty-state">
+  <p><strong>Nothing logged here yet.</strong></p>
+  <p>Every receipt you add shows up in this list and in the tax export.</p>
+</div>
+{% endif %}
+{% endblock %}

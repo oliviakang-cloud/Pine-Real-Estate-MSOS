@@ -2,19 +2,48 @@
 {% block title %}{{ prop.street }}{% endblock %}
 
 {% block content %}
-<div class="headline">
-  <p class="crumb"><a href="{{ url_for('properties') }}">Properties</a></p>
-  <h1>{{ prop.street }}</h1>
-  <p class="lede">
-    {% if prop.city %}{{ prop.city }}{% if prop.state %}, {{ prop.state }}{% endif %} &middot; {% endif %}
-    {{ lines | length }} expense{{ '' if lines | length == 1 else 's' }} totaling <strong>{{ total | money }}</strong>
-  </p>
-</div>
+{% include "_property_nav.html" %}
 
 <div class="actionrow">
   <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add expense</a>
   <a class="action secondary" href="{{ url_for('job_new', property_id=prop.id) }}">Log a repair</a>
 </div>
+
+<div class="cards">
+  <a class="card" href="{{ url_for('property_expenses', property_id=prop.id) }}">
+    <span class="card-value">{{ total | money }}</span>
+    <span class="card-label">Spent here</span>
+  </a>
+  <a class="card" href="{{ url_for('property_repairs', property_id=prop.id) }}">
+    <span class="card-value">{{ open_repairs }}</span>
+    <span class="card-label">Open repair{{ '' if open_repairs == 1 else 's' }}</span>
+  </a>
+  <a class="card" href="{{ url_for('property_rent', property_id=prop.id) }}">
+    <span class="card-value{% if rent_unsettled %} is-flag{% endif %}">
+      {%- if leases %}{{ leases | length - rent_unsettled }}/{{ leases | length }}{% else %}—{% endif %}
+    </span>
+    <span class="card-label">Rent paid this month</span>
+  </a>
+</div>
+
+{% if recent_jobs %}
+<h2 class="section">Open repairs</h2>
+<ol class="ledger">
+  {% for job in recent_jobs %}
+  <li>
+    <a href="{{ url_for('job_detail', job_id=job.id) }}">
+      <span class="ledger-name">
+        {% if job.priority == 1 %}<span class="urgent">Urgent</span> {% endif %}{{ job.title }}
+      </span>
+      <span class="ledger-right">
+        <span class="status status-{{ job.status }}">{{ job_status_labels.get(job.status, job.status) }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+{% endif %}
 
 {% if leases %}
 <h2 class="section">Tenants</h2>
@@ -39,54 +68,26 @@
 </ol>
 {% endif %}
 
-{% if by_category %}
-<table class="breakdown">
-  <caption>Where the money went</caption>
-  <tbody>
-  {% for category, amount in by_category %}
-    <tr>
-      <th scope="row">{{ category_labels.get(category, category) }}</th>
-      <td>{{ amount | money }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-
 {% if lines %}
-<h2 class="section">Expenses</h2>
+<h2 class="section">Recent expenses</h2>
 <ol class="ledger">
   {% for line in lines %}
   <li>
     <div class="entry">
       <span class="ledger-name">
         {{ line.description }}
-        <span class="sub">
-          {{ line.incurred_on | short_date }}
-          {%- if line.unit_id and units.get(line.unit_id) %} &middot; {{ units[line.unit_id].label }}{% endif %}
-          {%- if line.category != 'uncategorized' %} &middot; {{ category_labels.get(line.category, line.category) }}{% endif %}
-          {%- if line.treatment == 'capital' %} &middot; improvement{% endif %}
-        </span>
-        {% if line.needs_review %}<span class="flag">{{ line.review_note or 'Needs a look' }}</span>{% endif %}
-        {% if receipts.get(line.receipt_id) %}
-        <a class="receiptlink" href="{{ url_for('media', key=receipts[line.receipt_id]) }}">View receipt</a>
-        {% else %}
-        <form method="post" action="{{ url_for('expense_receipt', line_id=line.id) }}"
-              enctype="multipart/form-data" class="receiptform">
-          <input type="file" name="receipt" accept="image/*,application/pdf" capture="environment"
-                 id="r{{ line.id }}" onchange="this.form.submit()">
-          <label class="receiptbtn" for="r{{ line.id }}">Add receipt</label>
-        </form>
-        {% endif %}
+        <span class="sub">{{ line.incurred_on | short_date }}</span>
       </span>
       <span class="ledger-amount">{{ line.amount_cents | money }}</span>
     </div>
   </li>
   {% endfor %}
 </ol>
-{% else %}
-<p class="empty">Nothing logged against this property yet.</p>
+<p class="hint"><a href="{{ url_for('property_expenses', property_id=prop.id) }}">See all expenses →</a></p>
+{% endif %}
+
+{% if units | length > 1 %}
+<h2 class="section">Units</h2>
+<p class="lede">{{ units | map(attribute='label') | join(', ') }}</p>
 {% endif %}
 {% endblock %}
-
-{% block pageactions %}{% endblock %}

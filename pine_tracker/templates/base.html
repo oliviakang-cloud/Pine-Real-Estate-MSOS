@@ -6,16 +6,51 @@
 <title>{% block title %}Pine tracker{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body{% if active_tab %} class="has-tabs"{% endif %}>
+<body>
 
 <header class="topbar">
-  <span class="wordmark">Pine tracker</span>
+  <a class="wordmark" href="{{ url_for('properties') }}">Pine tracker</a>
   {% if session.get('signed_in') %}
   <form method="post" action="{{ url_for('sign_out') }}" class="inline">
     <button class="linky" type="submit">Sign out</button>
   </form>
   {% endif %}
 </header>
+
+{% if active_tab %}
+<nav class="tabs" aria-label="Main">
+  <a class="tab{% if active_tab == 'properties' %} is-active{% endif %}"
+     href="{{ url_for('properties') }}"
+     {% if active_tab == 'properties' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21H3z"/><path d="M9 21v-6h6v6"/></svg>
+    <span>Properties</span>
+  </a>
+
+  <a class="tab{% if active_tab == 'rent' %} is-active{% endif %}"
+     href="{{ url_for('rent') }}"
+     {% if active_tab == 'rent' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+    <span>Rent</span>
+    {% if rent_due %}<em class="badge badge-flag">{{ rent_due }}</em>{% endif %}
+  </a>
+
+  <a class="tab{% if active_tab == 'repairs' %} is-active{% endif %}"
+     href="{{ url_for('jobs') }}"
+     {% if active_tab == 'repairs' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 1 5 5l-9 9-5-5 9-9z"/><path d="m5 19 2 2"/></svg>
+    <span>Repairs</span>
+    {% if open_jobs %}<em class="badge">{{ open_jobs }}</em>{% endif %}
+  </a>
+
+  <a class="tab{% if active_tab == 'review' %} is-active{% endif %}"
+     href="{{ url_for('review') }}"
+     {% if active_tab == 'review' %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 7-7"/><path d="M21 12v7H3V5h12"/></svg>
+    <span>To file</span>
+    {% if to_review %}<em class="badge badge-flag">{{ to_review }}</em>{% endif %}
+  </a>
+</nav>
+{% endif %}
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
@@ -30,41 +65,6 @@
 <main>
 {% block content %}{% endblock %}
 </main>
-
-{% if active_tab %}
-<nav class="tabs" aria-label="Main">
-  <a class="tab{% if active_tab == 'properties' %} is-active{% endif %}"
-     href="{{ url_for('properties') }}"
-     {% if active_tab == 'properties' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V21H3z"/><path d="M9 21v-6h6v6"/></svg>
-    <span>Properties</span>
-  </a>
-
-  <a class="tab{% if active_tab == 'repairs' %} is-active{% endif %}"
-     href="{{ url_for('jobs') }}"
-     {% if active_tab == 'repairs' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 1 5 5l-9 9-5-5 9-9z"/><path d="m5 19 2 2"/></svg>
-    <span>Repairs</span>
-    {% if open_jobs %}<em class="badge">{{ open_jobs }}</em>{% endif %}
-  </a>
-
-  <a class="tab{% if active_tab == 'rent' %} is-active{% endif %}"
-     href="{{ url_for('rent') }}"
-     {% if active_tab == 'rent' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
-    <span>Rent</span>
-    {% if rent_due %}<em class="badge badge-flag">{{ rent_due }}</em>{% endif %}
-  </a>
-
-  <a class="tab{% if active_tab == 'review' %} is-active{% endif %}"
-     href="{{ url_for('review') }}"
-     {% if active_tab == 'review' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 7-7"/><path d="M21 12v7H3V5h12"/></svg>
-    <span>To review</span>
-    {% if to_review %}<em class="badge badge-flag">{{ to_review }}</em>{% endif %}
-  </a>
-</nav>
-{% endif %}
 
 </body>
 </html>
