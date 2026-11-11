@@ -12,9 +12,32 @@
 </div>
 
 <div class="actionrow">
-  <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add expense here</a>
+  <a class="action" href="{{ url_for('expense_new', property_id=prop.id) }}">Add expense</a>
   <a class="action secondary" href="{{ url_for('job_new', property_id=prop.id) }}">Log a repair</a>
 </div>
+
+{% if leases %}
+<h2 class="section">Tenants</h2>
+<ol class="ledger">
+  {% for row in leases %}
+  <li>
+    <a href="{{ url_for('rent_lease', lease_id=row.lease.id) }}">
+      <span class="ledger-name">
+        {{ row.tenant.name if row.tenant else 'Tenant' }}
+        <span class="sub">
+          {% if row.unit and row.unit.label != 'Main' %}{{ row.unit.label }} &middot; {% endif %}
+          {{ row.lease.rent_cents | money }} a month
+        </span>
+      </span>
+      <span class="ledger-right">
+        <span class="status rent-{{ row.status.status }}">{{ rent_labels[row.status.status] }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+{% endif %}
 
 {% if by_category %}
 <table class="breakdown">

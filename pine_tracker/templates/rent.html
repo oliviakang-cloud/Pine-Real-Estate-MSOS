@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Rent{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <h1>Rent</h1>
+  <p class="lede">Who has paid, who is short, and who is late.</p>
+</div>
+
+<div class="monthnav">
+  <a class="monthstep" href="{{ url_for('rent', month=prev_month) }}" aria-label="Previous month">‹</a>
+  <span class="monthname">{{ period_label }}</span>
+  <a class="monthstep" href="{{ url_for('rent', month=next_month) }}" aria-label="Next month">›</a>
+</div>
+
+{% if rows %}
+<table class="breakdown">
+  <tbody>
+    <tr><th scope="row">Expected</th><td>{{ expected | money }}</td></tr>
+    <tr><th scope="row">Collected</th><td>{{ collected | money }}</td></tr>
+    {% if outstanding %}
+    <tr class="owing"><th scope="row">Still owed</th><td>{{ outstanding | money }}</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<ol class="ledger">
+  {% for row in rows %}
+  <li>
+    <a href="{{ url_for('rent_lease', lease_id=row.lease.id) }}">
+      <span class="ledger-name">
+        {{ row.tenant.name if row.tenant else 'Tenant' }}
+        <span class="sub">
+          {% if row.property %}{{ row.property.street }}{% endif %}
+          {%- if row.unit and row.unit.label != 'Main' %} &middot; {{ row.unit.label }}{% endif %}
+          {%- if row.status.is_split %} &middot; paid in {{ row.status.payment_count }} parts{% endif %}
+        </span>
+        {% if row.status.balance_cents > 0 %}
+        <span class="sub owing-note">
+          {{ row.status.received_cents | money }} of {{ row.status.expected_cents | money }} &middot;
+          {{ row.status.balance_cents | money }} short
+        </span>
+        {% endif %}
+      </span>
+      <span class="ledger-right">
+        <span class="status rent-{{ row.status.status }}">{{ status_labels[row.status.status] }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+<p class="hint">Tap a tenant to record a payment or see past months.</p>
+{% else %}
+<div class="empty-state">
+  <p><strong>No tenants yet.</strong></p>
+  <p>Add a tenant and their monthly rent, and this page will track what comes in each month.</p>
+</div>
+{% endif %}
+
+<a class="action wide" href="{{ url_for('lease_new') }}">Add a tenant</a>
+{% endblock %}

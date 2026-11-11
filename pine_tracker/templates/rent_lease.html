@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ tenant.name if tenant else 'Tenant' }}{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <p class="crumb"><a href="{{ url_for('rent') }}">Rent</a></p>
+  <h1>{{ tenant.name if tenant else 'Tenant' }}</h1>
+  <p class="lede">
+    {% if prop %}<a href="{{ url_for('property_detail', property_id=prop.id) }}">{{ prop.street }}</a>{% endif %}
+    {%- if unit and unit.label != 'Main' %} &middot; {{ unit.label }}{% endif %}
+    &middot; {{ lease.rent_cents | money }} a month
+  </p>
+  {% if lease.subsidy_cents %}
+  <p class="lede">
+    Section 8: tenant pays {{ (lease.rent_cents - lease.subsidy_cents) | money }},
+    housing authority pays {{ lease.subsidy_cents | money }}.
+  </p>
+  {% endif %}
+</div>
+
+<form method="post" action="{{ url_for('rent_payment', lease_id=lease.id) }}" class="stack paymentform">
+  <h2 class="section">Record a payment</h2>
+
+  <div class="pair">
+    <label>
+      Amount received
+      <input type="text" inputmode="decimal" name="amount" placeholder="1450.00" required>
+    </label>
+    <label>
+      For month
+      <input type="month" name="period" value="{{ this_month }}" required>
+    </label>
+  </div>
+
+  <div class="pair">
+    <label>
+      Received on
+      <input type="date" name="received_on" value="{{ this_month }}-01" required>
+    </label>
+    <label>
+      From
+      <select name="source">
+        <option value="tenant">Tenant</option>
+        <option value="housing_authority">Housing authority</option>
+        <option value="other">Other</option>
+      </select>
+    </label>
+  </div>
+
+  <label>
+    How <span class="opt">optional</span>
+    <input type="text" name="method" placeholder="Zelle, check 1042, cash">
+  </label>
+
+  <button class="action wide" type="submit">Record payment</button>
+  <p class="help">Paying in two parts? Record each one. They add up against the same month.</p>
+</form>
+
+<h2 class="section">History</h2>
+
+<ol class="ledger rentmonths">
+  {% for entry in history %}
+  <li>
+    <div class="entry">
+      <span class="ledger-name">
+        {{ period_label(entry.status.period) }}
+        <span class="sub">
+          {{ entry.status.received_cents | money }} of {{ entry.status.expected_cents | money }}
+          {%- if entry.status.balance_cents > 0 %} &middot; {{ entry.status.balance_cents | money }} short{% endif %}
+        </span>
+      </span>
+      <span class="status rent-{{ entry.status.status }}">{{ status_labels[entry.status.status] }}</span>
+    </div>
+
+    {% if entry.payments %}
+    <ul class="payments">
+      {% for payment in entry.payments %}
+      <li>
+        <span>
+          {{ payment.received_cents | money }}
+          <span class="sub">
+            {% if payment.received_on %}{{ payment.received_on | short_date }}{% endif %}
+            {%- if payment.source == 'housing_authority' %} &middot; housing authority{% endif %}
+            {%- if payment.method %} &middot; {{ payment.method }}{% endif %}
+          </span>
+        </span>
+        <form method="post" action="{{ url_for('rent_payment_delete', payment_id=payment.id) }}" class="inline">
+          <button class="linky danger" type="submit">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endblock %}

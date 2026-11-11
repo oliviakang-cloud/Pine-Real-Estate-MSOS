@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Add a tenant{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <p class="crumb"><a href="{{ url_for('rent') }}">Rent</a></p>
+  <h1>Add a tenant</h1>
+  <p class="lede">Once the rent is set, each month tracks itself.</p>
+</div>
+
+<form method="post" class="stack">
+  <label>
+    Unit
+    <select name="unit_id" required autofocus>
+      <option value="">Choose one</option>
+      {% for u in units %}
+      <option value="{{ u.id }}" {% if form.unit_id == u.id | string %}selected{% endif %}>
+        {{ props[u.property_id].street if props.get(u.property_id) else '' }}{% if u.label != 'Main' %} — {{ u.label }}{% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>
+    Tenant name
+    <input type="text" name="tenant_name" value="{{ form.tenant_name }}" required>
+  </label>
+
+  <label>
+    Monthly rent
+    <input type="text" inputmode="decimal" name="rent" value="{{ form.rent }}" placeholder="2400" required>
+  </label>
+
+  <label>
+    Housing authority portion <span class="opt">Section 8 only</span>
+    <input type="text" inputmode="decimal" name="subsidy" value="{{ form.subsidy }}" placeholder="0">
+    <span class="help">The part the housing authority pays. Leave blank if the tenant pays it all.</span>
+  </label>
+
+  <details>
+    <summary>More detail <span class="opt">optional</span></summary>
+
+    <label>
+      Phone
+      <input type="tel" name="phone" value="{{ form.phone }}">
+    </label>
+
+    <label>
+      Deposit held
+      <input type="text" inputmode="decimal" name="deposit" value="{{ form.deposit }}">
+    </label>
+
+    <label>
+      Lease started
+      <input type="date" name="starts_on" value="{{ form.starts_on }}">
+    </label>
+  </details>
+
+  <button class="action wide" type="submit">Save tenant</button>
+</form>
+{% endblock %}

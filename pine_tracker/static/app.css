@@ -12,6 +12,9 @@
   --flag: #8a5a00;   /* needs a human decision */
   --tap: 3rem;
   --active-wash: #e8f0f6;
+  --paid: #1f6b4d;
+  --late: #9c2f22;
+  --late-wash: #fbeeed;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -227,6 +230,9 @@ button, .action {
     --mark: #6fb2e0;
     --flag: #d9a441;
     --active-wash: #1d2830;
+    --paid: #6cc39a;
+    --late: #e5847c;
+    --late-wash: #2a1e1e;
   }
   button, .action { color: #10181d; }
 }
@@ -544,3 +550,61 @@ body.has-tabs {
   .tab.is-active { border-bottom-color: var(--mark); }
   .badge { position: static; margin-left: 0.15rem; }
 }
+
+/* ======================================================================
+   Rent
+   ====================================================================== */
+
+.monthnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 1rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.monthname { font-weight: 650; }
+.monthstep {
+  min-width: var(--tap);
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mark);
+  text-decoration: none;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+/* Status chips carry the whole message on this screen, so they are the
+   one place color is allowed to do real work. */
+.rent-paid, .rent-overpaid { color: var(--paid); border-color: var(--paid); }
+.rent-partial { color: var(--flag); border-color: var(--flag); }
+.rent-late { color: var(--late); border-color: var(--late); background: var(--late-wash); font-weight: 650; }
+.rent-due { color: var(--muted); }
+
+.owing th, .owing td { color: var(--late); font-weight: 650; }
+.owing-note { color: var(--late); }
+
+.rentmonths > li { padding-bottom: 0.3rem; }
+.payments {
+  list-style: none;
+  margin: 0;
+  padding: 0 0.85rem 0.5rem 1.6rem;
+}
+.payments li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+  border-left: 2px solid var(--line);
+  padding-left: 0.6rem;
+}
+.linky.danger { color: var(--muted); font-size: 0.8rem; }
+
+.paymentform { margin-bottom: 1.5rem; }
+.pair { display: flex; gap: 0.6rem; }
+.pair label { flex: 1 1 0; }

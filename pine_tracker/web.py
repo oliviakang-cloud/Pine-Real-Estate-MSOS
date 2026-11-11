@@ -33,16 +33,20 @@ from .models import (
     ExpenseLine,
     Job,
     JobStatus,
+    Lease,
     Member,
     Organization,
     Photo,
     PhotoKind,
     Property,
     Receipt,
+    RentPayment,
     ScheduleE,
+    Tenant,
     Unit,
     Vendor,
 )
+from . import rent as rentlib
 from .money import fmt, to_cents
 from .storage import UploadError, resolve, save_upload
 
@@ -249,12 +253,21 @@ def create_app(database_url: Optional[str] = None) -> Flask:
                 if r.image_key
             }
 
+        period = rentlib.period_start(dt.date.today())
+        leases = [
+            row
+            for row in _lease_rows(org.id, period)
+            if row["unit"] and row["unit"].property_id == prop.id
+        ]
+
         return render_template(
             "property.html",
             prop=prop,
             lines=lines,
             units=units,
             receipts=receipts,
+            leases=leases,
+            rent_labels=rentlib.STATUS_LABELS,
             total=sum(line.amount_cents for line in lines),
             by_category=sorted(by_category.items(), key=lambda kv: -kv[1]),
             category_labels=CATEGORY_LABELS,
@@ -657,6 +670,300 @@ def create_app(database_url: Optional[str] = None) -> Flask:
         flash("Marked reviewed.", "ok")
         return redirect(url_for("review"))
 
+    # -- rent --------------------------------------------------------------
+
+    def _grace_days() -> int:
+        try:
+            return int(os.environ.get("RENT_GRACE_DAYS", rentlib.DEFAULT_GRACE_DAYS))
+        except ValueError:
+            return rentlib.DEFAULT_GRACE_DAYS
+
+    def _lease_rows(org_id: int, period: dt.date):
+        """Every active lease with its status for one month."""
+        leases = g.db.scalars(
+            select(Lease).where(Lease.organization_id == org_id, Lease.active.is_(True))
+        ).all()
+        if not leases:
+            return []
+
+        payments = g.db.scalars(
+            select(RentPayment).where(
+                RentPayment.lease_id.in_([lease.id for lease in leases]),
+                RentPayment.period_start == period,
+            )
+        ).all()
+        by_lease: dict[int, list] = {}
+        for payment in payments:
+            by_lease.setdefault(payment.lease_id, []).append(payment)
+
+        units = {
+            u.id: u
+            for u in g.db.scalars(
+                select(Unit).where(Unit.organization_id == org_id)
+            ).all()
+        }
+        props = {
+            p.id: p
+            for p in g.db.scalars(
+                select(Property).where(Property.organization_id == org_id)
+            ).all()
+        }
+        tenants = {
+            t.id: t
+            for t in g.db.scalars(
+                select(Tenant).where(Tenant.organization_id == org_id)
+            ).all()
+        }
+
+        rows = []
+        for lease in leases:
+            unit = units.get(lease.unit_id)
+            rows.append(
+                {
+                    "lease": lease,
+                    "unit": unit,
+                    "property": props.get(unit.property_id) if unit else None,
+                    "tenant": tenants.get(lease.tenant_id),
+                    "status": rentlib.status_for(
+                        period,
+                        lease.rent_cents,
+                        lease.subsidy_cents,
+                        by_lease.get(lease.id, []),
+                        grace_days=_grace_days(),
+                    ),
+                }
+            )
+        # Problems first: late, then part paid, then everything settled.
+        order = {
+            rentlib.LATE: 0,
+            rentlib.PARTIAL: 1,
+            rentlib.DUE: 2,
+            rentlib.PAID: 3,
+            rentlib.OVERPAID: 4,
+        }
+        rows.sort(key=lambda r: (order.get(r["status"].status, 9), r["lease"].id))
+        return rows
+
+    @app.get("/rent")
+    @login_required
+    def rent():
+        org = current_org()
+        month = request.args.get("month", "")
+        try:
+            period = dt.date.fromisoformat(month + "-01") if month else None
+        except ValueError:
+            period = None
+        period = period or rentlib.period_start(dt.date.today())
+
+        rows = _lease_rows(org.id, period)
+        return render_template(
+            "rent.html",
+            rows=rows,
+            period=period,
+            period_label=rentlib.period_label(period),
+            prev_month=rentlib.shift_months(period, -1).strftime("%Y-%m"),
+            next_month=rentlib.shift_months(period, 1).strftime("%Y-%m"),
+            expected=sum(r["status"].expected_cents for r in rows),
+            collected=sum(r["status"].received_cents for r in rows),
+            outstanding=sum(
+                max(r["status"].balance_cents, 0) for r in rows
+            ),
+            status_labels=rentlib.STATUS_LABELS,
+        )
+
+    @app.get("/rent/<int:lease_id>")
+    @login_required
+    def rent_lease(lease_id: int):
+        org = current_org()
+        lease = g.db.get(Lease, lease_id)
+        if lease is None or lease.organization_id != org.id:
+            abort(404)
+
+        unit = g.db.get(Unit, lease.unit_id)
+        prop = g.db.get(Property, unit.property_id) if unit else None
+        tenant = g.db.get(Tenant, lease.tenant_id)
+
+        payments = g.db.scalars(
+            select(RentPayment)
+            .where(RentPayment.lease_id == lease.id)
+            .order_by(RentPayment.period_start.desc(), RentPayment.received_on)
+        ).all()
+
+        by_period: dict[dt.date, list] = {}
+        for payment in payments:
+            by_period.setdefault(payment.period_start, []).append(payment)
+
+        # Twelve months back from the current month, plus any older period
+        # that already has payments, so history never silently disappears.
+        this_month = rentlib.period_start(dt.date.today())
+        periods = {rentlib.shift_months(this_month, -n) for n in range(12)}
+        periods.update(by_period)
+        periods = sorted((p for p in periods if p >= lease.starts_on.replace(day=1)),
+                         reverse=True)
+
+        history = [
+            {
+                "status": rentlib.status_for(
+                    period,
+                    lease.rent_cents,
+                    lease.subsidy_cents,
+                    by_period.get(period, []),
+                    grace_days=_grace_days(),
+                ),
+                "payments": by_period.get(period, []),
+            }
+            for period in periods
+        ]
+
+        return render_template(
+            "rent_lease.html",
+            lease=lease,
+            unit=unit,
+            prop=prop,
+            tenant=tenant,
+            history=history,
+            this_month=this_month.strftime("%Y-%m"),
+            status_labels=rentlib.STATUS_LABELS,
+            period_label=rentlib.period_label,
+        )
+
+    @app.post("/rent/<int:lease_id>/payment")
+    @login_required
+    def rent_payment(lease_id: int):
+        org = current_org()
+        lease = g.db.get(Lease, lease_id)
+        if lease is None or lease.organization_id != org.id:
+            abort(404)
+
+        try:
+            amount_cents = to_cents(request.form.get("amount", ""))
+        except Exception:
+            amount_cents = 0
+        if amount_cents <= 0:
+            flash("Enter the amount received, like 1450.00.", "error")
+            return redirect(url_for("rent_lease", lease_id=lease.id))
+
+        month = request.form.get("period", "")
+        try:
+            period = dt.date.fromisoformat(month + "-01")
+        except ValueError:
+            period = rentlib.period_start(dt.date.today())
+
+        try:
+            received_on = dt.date.fromisoformat(request.form.get("received_on", ""))
+        except ValueError:
+            received_on = dt.date.today()
+
+        source = request.form.get("source", "tenant")
+        g.db.add(
+            RentPayment(
+                organization_id=org.id,
+                lease_id=lease.id,
+                period_start=period,
+                # Stored for history: what the full month was expected to be
+                # when this payment landed, even if the rent changes later.
+                expected_cents=lease.rent_cents,
+                received_cents=amount_cents,
+                received_on=received_on,
+                method=request.form.get("method", "").strip() or None,
+                source=source if source in ("tenant", "housing_authority", "other") else "tenant",
+            )
+        )
+        g.db.commit()
+        flash(f"Recorded {fmt(amount_cents)} for {rentlib.period_label(period)}.", "ok")
+        return redirect(url_for("rent_lease", lease_id=lease.id))
+
+    @app.post("/rent/payment/<int:payment_id>/delete")
+    @login_required
+    def rent_payment_delete(payment_id: int):
+        org = current_org()
+        payment = g.db.get(RentPayment, payment_id)
+        if payment is None or payment.organization_id != org.id:
+            abort(404)
+        lease_id = payment.lease_id
+        g.db.delete(payment)
+        g.db.commit()
+        flash("Payment removed.", "ok")
+        return redirect(url_for("rent_lease", lease_id=lease_id))
+
+    @app.route("/leases/new", methods=["GET", "POST"])
+    @login_required
+    def lease_new():
+        org = current_org()
+        units = g.db.scalars(
+            select(Unit).where(Unit.organization_id == org.id).order_by(Unit.label)
+        ).all()
+        props = {
+            p.id: p
+            for p in g.db.scalars(
+                select(Property).where(Property.organization_id == org.id)
+            ).all()
+        }
+
+        form = {
+            "unit_id": request.args.get("unit_id", ""),
+            "tenant_name": "",
+            "phone": "",
+            "rent": "",
+            "subsidy": "",
+            "deposit": "",
+            "starts_on": dt.date.today().replace(day=1).isoformat(),
+        }
+
+        if request.method == "POST":
+            form.update({k: request.form.get(k, "").strip() for k in form})
+            errors = []
+            if not form["unit_id"]:
+                errors.append("Pick the unit this tenant rents.")
+            if not form["tenant_name"]:
+                errors.append("Add the tenant's name.")
+            try:
+                rent_cents = to_cents(form["rent"])
+                if rent_cents <= 0:
+                    errors.append("Enter the monthly rent.")
+            except Exception:
+                errors.append("Rent should be a number, like 2400.")
+                rent_cents = 0
+            try:
+                subsidy_cents = to_cents(form["subsidy"]) if form["subsidy"] else 0
+                deposit_cents = to_cents(form["deposit"]) if form["deposit"] else 0
+            except Exception:
+                errors.append("Subsidy and deposit should be numbers.")
+                subsidy_cents = deposit_cents = 0
+            try:
+                starts_on = dt.date.fromisoformat(form["starts_on"])
+            except ValueError:
+                errors.append("Start date should look like 2026-01-01.")
+                starts_on = dt.date.today()
+
+            if errors:
+                for message in errors:
+                    flash(message, "error")
+            else:
+                tenant = Tenant(
+                    organization_id=org.id,
+                    name=form["tenant_name"],
+                    phone=form["phone"] or None,
+                )
+                g.db.add(tenant)
+                g.db.flush()
+                lease = Lease(
+                    organization_id=org.id,
+                    unit_id=int(form["unit_id"]),
+                    tenant_id=tenant.id,
+                    starts_on=starts_on,
+                    rent_cents=rent_cents,
+                    subsidy_cents=subsidy_cents,
+                    deposit_cents=deposit_cents,
+                    active=True,
+                )
+                g.db.add(lease)
+                g.db.commit()
+                flash(f"{tenant.name} added.", "ok")
+                return redirect(url_for("rent_lease", lease_id=lease.id))
+
+        return render_template("lease_form.html", form=form, units=units, props=props)
+
     # -- navigation context ------------------------------------------------
 
     # Which endpoint belongs under which tab. Detail pages keep their parent
@@ -667,7 +974,10 @@ def create_app(database_url: Optional[str] = None) -> Flask:
         "jobs": "repairs",
         "job_detail": "repairs",
         "job_new": "repairs",
-        "expense_new": "add",
+        "expense_new": "properties",
+        "rent": "rent",
+        "rent_lease": "rent",
+        "lease_new": "rent",
         "review": "review",
         "review_resolve": "review",
     }
@@ -675,9 +985,9 @@ def create_app(database_url: Optional[str] = None) -> Flask:
     @app.context_processor
     def nav_context():
         if request.endpoint in (None, "static", "sign_in", "media"):
-            return {"active_tab": None, "open_jobs": 0, "to_review": 0}
+            return {"active_tab": None, "open_jobs": 0, "to_review": 0, "rent_due": 0}
 
-        counts = {"open_jobs": 0, "to_review": 0}
+        counts = {"open_jobs": 0, "to_review": 0, "rent_due": 0}
         try:
             org = current_org()
             counts["open_jobs"] = (
@@ -690,6 +1000,10 @@ def create_app(database_url: Optional[str] = None) -> Flask:
                     )
                 )
                 or 0
+            )
+            period = rentlib.period_start(dt.date.today())
+            counts["rent_due"] = sum(
+                1 for row in _lease_rows(org.id, period) if not row["status"].is_settled
             )
             counts["to_review"] = (
                 g.db.scalar(
