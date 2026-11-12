@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ prop.street }} turnover{% endblock %}
+
+{% block content %}
+{% include "_property_nav.html" %}
+
+{% if summaries %}
+<ol class="ledger">
+  {% for row in summaries %}
+  <li>
+    <a href="{{ url_for('turnover_detail', turnover_id=row.turnover.id) }}">
+      <span class="ledger-name">
+        {{ row.unit.label if row.unit else 'Unit' }}
+        <span class="sub">
+          {% if row.turnover.moved_out_on %}vacated {{ row.turnover.moved_out_on | short_date }}{% endif %}
+          {%- if row.progress.total %} &middot; {{ row.progress.done }} of {{ row.progress.total }} done{% endif %}
+        </span>
+        {% if row.progress.blockers_open %}
+        <span class="sub owing-note">{{ row.progress.blockers_open }} blocking the listing</span>
+        {% endif %}
+        <span class="meter" role="img"
+              aria-label="{{ row.progress.percent }} percent complete">
+          <span class="meter-fill" style="width: {{ row.progress.percent }}%"></span>
+        </span>
+      </span>
+      <span class="ledger-right">
+        <span class="status status-{{ row.turnover.status }}">
+          {% if row.turnover.status == 'ready' %}Ready{% elif row.turnover.status == 'in_progress' %}In progress{% else %}Walkthrough{% endif %}
+        </span>
+        <span class="chev" aria-hidden="true">›</span>
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<div class="empty-state">
+  <p><strong>No turnovers here.</strong></p>
+  <p>Start one when a tenant gives notice, and the walkthrough list builds itself.</p>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('turnover_new', property_id=prop.id) }}" class="stack boxform">
+  <h2 class="section">Start a turnover</h2>
+  <div class="pair">
+    <label>
+      Unit
+      <select name="unit_id" required>
+        {% for u in units %}
+        <option value="{{ u.id }}">{{ u.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Moved out
+      <input type="date" name="moved_out_on" value="{{ today }}">
+    </label>
+  </div>
+  <label class="check">
+    <input type="checkbox" name="seed" value="1" checked>
+    Start from the standard walkthrough list
+    <span class="help">17 things worth checking in an empty unit. Delete what doesn't apply.</span>
+  </label>
+  <button class="action wide" type="submit">Start turnover</button>
+</form>
+{% endblock %}

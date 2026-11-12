@@ -658,3 +658,123 @@ class Attachment(Base, TimestampMixin):
     filename: Mapped[str] = mapped_column(String(200), nullable=False)
     content_type: Mapped[Optional[str]] = mapped_column(String(80))
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer)
+
+
+class TurnoverStatus:
+    WALKTHROUGH = "walkthrough"   # listing what's wrong
+    IN_PROGRESS = "in_progress"   # work underway
+    READY = "ready"               # rentable again
+    OPEN_STATES = (WALKTHROUGH, IN_PROGRESS)
+    ALL = OPEN_STATES + (READY,)
+
+
+class TaskStatus:
+    TODO = "todo"
+    ASSIGNED = "assigned"
+    DOING = "doing"
+    BLOCKED = "blocked"
+    DONE = "done"
+    OPEN_STATES = (TODO, ASSIGNED, DOING, BLOCKED)
+    ALL = OPEN_STATES + (DONE,)
+
+
+class TaskPriority:
+    """Priority that means something operationally, not just "high/low".
+
+    BLOCKER is the useful one: it answers "what is stopping me listing this
+    unit", which is the question during a turnover.
+    """
+
+    BLOCKER = 1    # can't show or rent the unit until this is done
+    IMPORTANT = 2  # should be done before a new tenant moves in
+    NORMAL = 3     # worth doing while the unit is empty
+    OPTIONAL = 4   # only if time and budget allow
+    ALL = (BLOCKER, IMPORTANT, NORMAL, OPTIONAL)
+    LABELS = {
+        BLOCKER: "Blocker",
+        IMPORTANT: "Important",
+        NORMAL: "Normal",
+        OPTIONAL: "If time",
+    }
+
+
+class Turnover(Base, TimestampMixin):
+    """One unit being made rentable again between tenants.
+
+    Separate from MoveOut, which is deposit accounting with a legal clock.
+    A turnover is the work: what's wrong, who's doing it, how far along.
+    One move-out usually has exactly one turnover, but a unit can also be
+    turned over with no tenant involved (a flip, a long vacancy).
+    """
+
+    __tablename__ = "turnover"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organization.id"), nullable=False, index=True
+    )
+    unit_id: Mapped[int] = mapped_column(ForeignKey("unit.id"), nullable=False, index=True)
+    property_id: Mapped[int] = mapped_column(
+        ForeignKey("property.id"), nullable=False, index=True
+    )
+    lease_id: Mapped[Optional[int]] = mapped_column(ForeignKey("lease.id"))
+
+    moved_out_on: Mapped[Optional[dt.date]] = mapped_column(Date)
+    target_ready_on: Mapped[Optional[dt.date]] = mapped_column(Date)
+    ready_on: Mapped[Optional[dt.date]] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(
+        String(20), default=TurnoverStatus.WALKTHROUGH, nullable=False, index=True
+    )
+    notes: Mapped[Optional[str]] = mapped_column(String(600))
+
+    items: Mapped[list["TurnoverItem"]] = relationship(
+        back_populates="turnover", cascade="all, delete-orphan"
+    )
+
+
+class TurnoverItem(Base, TimestampMixin):
+    """One line of turnover work: what, where, how many, who, how far along.
+
+    ``quantity`` and ``unit_label`` together carry things like "12 sq yd of
+    carpet" or "3 outlet covers", which is what a quote and a materials run
+    both need.
+    """
+
+    __tablename__ = "turnover_item"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organization.id"), nullable=False, index=True
+    )
+    turnover_id: Mapped[int] = mapped_column(
+        ForeignKey("turnover.id"), nullable=False, index=True
+    )
+
+    area: Mapped[str] = mapped_column(String(60), nullable=False)      # Kitchen, Bath 2
+    item: Mapped[str] = mapped_column(String(300), nullable=False)     # what's wrong
+    quantity: Mapped[Optional[str]] = mapped_column(String(20))        # "12", "1.5"
+    unit_label: Mapped[Optional[str]] = mapped_column(String(20))      # "sq yd", "each"
+
+    priority: Mapped[int] = mapped_column(
+        Integer, default=TaskPriority.NORMAL, nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default=TaskStatus.TODO, nullable=False, index=True
+    )
+
+    # Who's doing it. A free-text name covers "me", a tenant's cousin, or
+    # anyone not yet in the vendor list; vendor_id links the ones who are.
+    assigned_to: Mapped[Optional[str]] = mapped_column(String(120))
+    vendor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("vendor.id"))
+    due_on: Mapped[Optional[dt.date]] = mapped_column(Date)
+    done_on: Mapped[Optional[dt.date]] = mapped_column(Date)
+
+    estimate_cents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Beyond normal wear: feeds the deposit statement later.
+    tenant_chargeable: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    notes: Mapped[Optional[str]] = mapped_column(String(400))
+    job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"))
+
+    turnover: Mapped[Turnover] = relationship(back_populates="items")

@@ -42,11 +42,17 @@ from .models import (
     Receipt,
     RentPayment,
     ScheduleE,
+    TaskPriority,
+    TaskStatus,
     Tenant,
+    Turnover,
+    TurnoverItem,
+    TurnoverStatus,
     Unit,
     Vendor,
 )
 from . import rent as rentlib
+from . import turnover as turnlib
 from .money import fmt, to_cents
 from .storage import UploadError, resolve, save_upload
 
@@ -234,10 +240,18 @@ def create_app(database_url: Optional[str] = None) -> Flask:
             row for row in _lease_rows(org_id, period)
             if row["unit"] and row["unit"].property_id == prop.id
         ]
+        open_turnovers = g.db.scalar(
+            select(func.count()).select_from(Turnover).where(
+                Turnover.organization_id == org_id,
+                Turnover.property_id == prop.id,
+                Turnover.status.in_(list(TurnoverStatus.OPEN_STATES)),
+            )
+        ) or 0
         return {
             "open_repairs": open_repairs,
             "leases": leases,
             "rent_unsettled": sum(1 for r in leases if not r["status"].is_settled),
+            "open_turnovers": open_turnovers,
         }
 
     def _property_expenses(org_id: int, prop, limit: int = 200):
@@ -1063,6 +1077,240 @@ def create_app(database_url: Optional[str] = None) -> Flask:
 
         return render_template("lease_form.html", form=form, units=units, props=props)
 
+    # -- turnovers ---------------------------------------------------------
+
+    @app.get("/property/<int:property_id>/turnover")
+    @login_required
+    def property_turnover(property_id: int):
+        org, prop = _property_or_404(property_id)
+        turnovers = g.db.scalars(
+            select(Turnover)
+            .where(Turnover.organization_id == org.id, Turnover.property_id == prop.id)
+            .order_by(Turnover.status, Turnover.id.desc())
+        ).all()
+
+        summaries = []
+        for turn in turnovers:
+            items = g.db.scalars(
+                select(TurnoverItem).where(TurnoverItem.turnover_id == turn.id)
+            ).all()
+            summaries.append(
+                {
+                    "turnover": turn,
+                    "unit": g.db.get(Unit, turn.unit_id),
+                    "progress": turnlib.progress_for(items),
+                }
+            )
+
+        units = g.db.scalars(
+            select(Unit).where(Unit.property_id == prop.id).order_by(Unit.label)
+        ).all()
+
+        return render_template(
+            "property_turnover.html",
+            prop=prop,
+            section="turnover",
+            summaries=summaries,
+            units=units,
+            today=dt.date.today().isoformat(),
+            **_property_counts(org.id, prop),
+        )
+
+    @app.post("/property/<int:property_id>/turnover/new")
+    @login_required
+    def turnover_new(property_id: int):
+        org, prop = _property_or_404(property_id)
+
+        unit_id = request.form.get("unit_id", "")
+        unit = g.db.get(Unit, int(unit_id)) if unit_id.isdigit() else None
+        if unit is None or unit.property_id != prop.id:
+            flash("Pick which unit is turning over.", "error")
+            return redirect(url_for("property_turnover", property_id=prop.id))
+
+        try:
+            moved_out_on = dt.date.fromisoformat(request.form.get("moved_out_on", ""))
+        except ValueError:
+            moved_out_on = dt.date.today()
+
+        turn = Turnover(
+            organization_id=org.id,
+            unit_id=unit.id,
+            property_id=prop.id,
+            moved_out_on=moved_out_on,
+            status=TurnoverStatus.WALKTHROUGH,
+        )
+        g.db.add(turn)
+        g.db.flush()
+
+        if request.form.get("seed") == "1":
+            for area, item, priority, unit_label in turnlib.STANDARD_WALKTHROUGH:
+                g.db.add(
+                    TurnoverItem(
+                        organization_id=org.id,
+                        turnover_id=turn.id,
+                        area=area,
+                        item=item,
+                        priority=priority,
+                        unit_label=unit_label,
+                        status=TaskStatus.TODO,
+                    )
+                )
+        g.db.commit()
+        return redirect(url_for("turnover_detail", turnover_id=turn.id))
+
+    @app.get("/turnover/<int:turnover_id>")
+    @login_required
+    def turnover_detail(turnover_id: int):
+        org = current_org()
+        turn = g.db.get(Turnover, turnover_id)
+        if turn is None or turn.organization_id != org.id:
+            abort(404)
+
+        items = g.db.scalars(
+            select(TurnoverItem).where(TurnoverItem.turnover_id == turn.id)
+        ).all()
+        items = sorted(items, key=turnlib.sort_key)
+
+        people = sorted(
+            {
+                (i.assigned_to or "").strip()
+                for i in items
+                if (i.assigned_to or "").strip()
+            }
+        )
+        vendors = g.db.scalars(
+            select(Vendor).where(Vendor.organization_id == org.id).order_by(Vendor.name)
+        ).all()
+
+        return render_template(
+            "turnover.html",
+            turn=turn,
+            unit=g.db.get(Unit, turn.unit_id),
+            prop=g.db.get(Property, turn.property_id),
+            items=items,
+            progress=turnlib.progress_for(items),
+            by_assignee=turnlib.by_assignee(items),
+            people=sorted(set(people) | {v.name for v in vendors}),
+            priority_labels=TaskPriority.LABELS,
+            statuses=TaskStatus.ALL,
+            turnover_statuses=TurnoverStatus.ALL,
+        )
+
+    @app.post("/turnover/<int:turnover_id>/item")
+    @login_required
+    def turnover_add_item(turnover_id: int):
+        org = current_org()
+        turn = g.db.get(Turnover, turnover_id)
+        if turn is None or turn.organization_id != org.id:
+            abort(404)
+
+        item_text = request.form.get("item", "").strip()
+        if not item_text:
+            flash("Say what needs doing.", "error")
+            return redirect(url_for("turnover_detail", turnover_id=turn.id))
+
+        try:
+            estimate = to_cents(request.form.get("estimate", "") or "0")
+        except Exception:
+            estimate = 0
+
+        priority = request.form.get("priority", "")
+        g.db.add(
+            TurnoverItem(
+                organization_id=org.id,
+                turnover_id=turn.id,
+                area=request.form.get("area", "").strip() or "Whole unit",
+                item=item_text,
+                quantity=request.form.get("quantity", "").strip() or None,
+                unit_label=request.form.get("unit_label", "").strip() or None,
+                priority=int(priority) if priority.isdigit() else TaskPriority.NORMAL,
+                assigned_to=request.form.get("assigned_to", "").strip() or None,
+                estimate_cents=estimate,
+                tenant_chargeable=request.form.get("tenant_chargeable") == "1",
+                status=(
+                    TaskStatus.ASSIGNED
+                    if request.form.get("assigned_to", "").strip()
+                    else TaskStatus.TODO
+                ),
+            )
+        )
+        g.db.commit()
+        return redirect(url_for("turnover_detail", turnover_id=turn.id))
+
+    @app.post("/turnover/item/<int:item_id>")
+    @login_required
+    def turnover_update_item(item_id: int):
+        org = current_org()
+        item = g.db.get(TurnoverItem, item_id)
+        if item is None or item.organization_id != org.id:
+            abort(404)
+
+        if request.form.get("delete") == "1":
+            turnover_id = item.turnover_id
+            g.db.delete(item)
+            g.db.commit()
+            return redirect(url_for("turnover_detail", turnover_id=turnover_id))
+
+        status = request.form.get("status")
+        if status in TaskStatus.ALL:
+            item.status = status
+            item.done_on = dt.date.today() if status == TaskStatus.DONE else None
+
+        if "assigned_to" in request.form:
+            who = request.form.get("assigned_to", "").strip()
+            item.assigned_to = who or None
+            # Assigning something that was still a to-do moves it along by
+            # itself; nobody wants to set two dropdowns for one action.
+            if who and item.status == TaskStatus.TODO:
+                item.status = TaskStatus.ASSIGNED
+
+        priority = request.form.get("priority", "")
+        if priority.isdigit() and int(priority) in TaskPriority.ALL:
+            item.priority = int(priority)
+
+        if "estimate" in request.form:
+            try:
+                item.estimate_cents = to_cents(request.form.get("estimate") or "0")
+            except Exception:
+                pass
+
+        if "quantity" in request.form:
+            item.quantity = request.form.get("quantity", "").strip() or None
+
+        if "tenant_chargeable" in request.form:
+            item.tenant_chargeable = request.form.get("tenant_chargeable") == "1"
+
+        g.db.commit()
+        return redirect(url_for("turnover_detail", turnover_id=item.turnover_id))
+
+    @app.post("/turnover/<int:turnover_id>/status")
+    @login_required
+    def turnover_status(turnover_id: int):
+        org = current_org()
+        turn = g.db.get(Turnover, turnover_id)
+        if turn is None or turn.organization_id != org.id:
+            abort(404)
+
+        status = request.form.get("status", "")
+        if status in TurnoverStatus.ALL:
+            turn.status = status
+            turn.ready_on = dt.date.today() if status == TurnoverStatus.READY else None
+            g.db.commit()
+            flash(
+                "Marked ready to rent." if status == TurnoverStatus.READY else "Updated.",
+                "ok",
+            )
+
+        target = request.form.get("target_ready_on", "")
+        if target:
+            try:
+                turn.target_ready_on = dt.date.fromisoformat(target)
+                g.db.commit()
+            except ValueError:
+                pass
+
+        return redirect(url_for("turnover_detail", turnover_id=turn.id))
+
     # -- navigation context ------------------------------------------------
 
     # Which endpoint belongs under which tab. Detail pages keep their parent
@@ -1073,6 +1321,9 @@ def create_app(database_url: Optional[str] = None) -> Flask:
         "property_expenses": "properties",
         "property_repairs": "properties",
         "property_rent": "properties",
+        "property_turnover": "properties",
+        "turnover_detail": "properties",
+        "turnover_new": "properties",
         "jobs": "repairs",
         "job_detail": "repairs",
         "job_new": "repairs",

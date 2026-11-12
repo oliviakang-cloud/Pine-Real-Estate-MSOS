@@ -658,3 +658,103 @@ button, .action {
 .card-label { color: var(--muted); font-size: 0.78rem; line-height: 1.2; }
 
 .totalrow th, .totalrow td { font-weight: 650; }
+
+/* ======================================================================
+   Turnover punch list
+   ====================================================================== */
+
+.meter {
+  display: block;
+  height: 5px;
+  margin-top: 0.4rem;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.meter-big { height: 9px; margin: 0.25rem 0 0.5rem; }
+.meter-fill { display: block; height: 100%; background: var(--paid); }
+
+.tablewrap { overflow-x: auto; margin: 0 0 1.5rem; }
+
+.punch {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.punch th, .punch td {
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.punch thead th {
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.punch .num { text-align: right; white-space: nowrap; }
+.punch tr.is-blocker { background: var(--late-wash); }
+.punch tr.is-done { color: var(--muted); }
+.punch tr.is-done .prio { opacity: 0.5; }
+
+.prio {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 2px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid currentColor;
+}
+.prio-1 { color: var(--late); font-weight: 650; }
+.prio-2 { color: var(--flag); }
+.prio-3, .prio-4 { color: var(--muted); }
+
+.chargeable { color: var(--flag); }
+
+.cellform { margin: 0; }
+.cellform input, .cellform select {
+  margin-top: 0;
+  min-height: 2.25rem;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.85rem;
+  min-width: 6rem;
+}
+
+.boxform {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+.boxform .section { margin-top: 0; }
+
+.check {
+  display: block;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+.check input { display: inline; width: auto; min-height: 0; margin-right: 0.4rem; }
+
+.assignee { margin-bottom: 1rem; }
+.assignee h3 { margin: 0 0 0.25rem; font-size: 0.95rem; }
+.plain { list-style: none; margin: 0; padding: 0 0 0 0.75rem; border-left: 2px solid var(--line); }
+.plain li { padding: 0.15rem 0; font-size: 0.9rem; }
+
+.status-walkthrough { color: var(--flag); border-color: var(--flag); }
+.status-ready { color: var(--paid); border-color: var(--paid); }
+
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

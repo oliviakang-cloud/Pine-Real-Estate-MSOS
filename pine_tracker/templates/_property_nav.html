@@ -19,6 +19,11 @@
      {% if section == 'repairs' %}aria-current="page"{% endif %}>
     Repairs{% if open_repairs %} <em class="pip">{{ open_repairs }}</em>{% endif %}
   </a>
+  <a class="subtab{% if section == 'turnover' %} is-on{% endif %}"
+     href="{{ url_for('property_turnover', property_id=prop.id) }}"
+     {% if section == 'turnover' %}aria-current="page"{% endif %}>
+    Turnover{% if open_turnovers %} <em class="pip pip-flag">{{ open_turnovers }}</em>{% endif %}
+  </a>
   <a class="subtab{% if section == 'rent' %} is-on{% endif %}"
      href="{{ url_for('property_rent', property_id=prop.id) }}"
      {% if section == 'rent' %}aria-current="page"{% endif %}>

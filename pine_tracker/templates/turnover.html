@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}{{ unit.label if unit else 'Turnover' }} turnover{% endblock %}
+
+{% block content %}
+<div class="headline">
+  <p class="crumb">
+    <a href="{{ url_for('property_turnover', property_id=turn.property_id) }}">← {{ prop.street if prop else 'Property' }}</a>
+  </p>
+  <h1>{{ unit.label if unit else 'Unit' }} turnover</h1>
+  <p class="lede">
+    {% if turn.moved_out_on %}Vacated {{ turn.moved_out_on | short_date }}{% endif %}
+    {%- if turn.target_ready_on %} &middot; target {{ turn.target_ready_on | short_date }}{% endif %}
+  </p>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <span class="card-value">{{ progress.done }}/{{ progress.total }}</span>
+    <span class="card-label">Done</span>
+  </div>
+  <div class="card">
+    <span class="card-value{% if progress.blockers_open %} is-flag{% endif %}">{{ progress.blockers_open }}</span>
+    <span class="card-label">Blocking the listing</span>
+  </div>
+  <div class="card">
+    <span class="card-value">{{ progress.estimate_cents | money }}</span>
+    <span class="card-label">Estimated cost</span>
+  </div>
+</div>
+
+<span class="meter meter-big" role="img" aria-label="{{ progress.percent }} percent complete">
+  <span class="meter-fill" style="width: {{ progress.percent }}%"></span>
+</span>
+<p class="hint">
+  {{ progress.percent }}% complete.
+  {%- if progress.unassigned %} {{ progress.unassigned }} item{{ '' if progress.unassigned == 1 else 's' }} with nobody assigned.{% endif %}
+  {%- if progress.chargeable_cents %} {{ progress.chargeable_cents | money }} marked chargeable to the tenant.{% endif %}
+</p>
+
+<form method="post" action="{{ url_for('turnover_status', turnover_id=turn.id) }}" class="statusrow">
+  <label class="inlinelabel" for="turnstatus">Stage</label>
+  <select id="turnstatus" name="status">
+    <option value="walkthrough" {% if turn.status == 'walkthrough' %}selected{% endif %}>Walkthrough</option>
+    <option value="in_progress" {% if turn.status == 'in_progress' %}selected{% endif %}>Work underway</option>
+    <option value="ready" {% if turn.status == 'ready' %}selected{% endif %}>Ready to rent</option>
+  </select>
+  <input type="date" name="target_ready_on" value="{{ turn.target_ready_on.isoformat() if turn.target_ready_on else '' }}"
+         aria-label="Target ready date">
+  <button type="submit">Save</button>
+</form>
+
+<h2 class="section">Punch list</h2>
+
+{% if items %}
+<div class="tablewrap">
+<table class="punch">
+  <thead>
+    <tr>
+      <th scope="col">Item</th>
+      <th scope="col" class="num">Qty</th>
+      <th scope="col">Who</th>
+      <th scope="col">Progress</th>
+      <th scope="col" class="num">Est.</th>
+      <th scope="col"><span class="sr">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in items %}
+    <tr class="{% if item.status == 'done' %}is-done{% elif item.priority == 1 %}is-blocker{% endif %}">
+      <td>
+        <span class="prio prio-{{ item.priority }}">{{ priority_labels[item.priority] }}</span>
+        {{ item.item }}
+        <span class="sub">
+          {{ item.area }}
+          {%- if item.tenant_chargeable %} &middot; <span class="chargeable">charge tenant</span>{% endif %}
+          {%- if item.done_on %} &middot; done {{ item.done_on | short_date }}{% endif %}
+        </span>
+      </td>
+      <td class="num">
+        {% if item.quantity %}{{ item.quantity }}{% endif %}
+        {%- if item.unit_label %} <span class="sub">{{ item.unit_label }}</span>{% endif %}
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('turnover_update_item', item_id=item.id) }}" class="cellform">
+          <input type="text" name="assigned_to" value="{{ item.assigned_to or '' }}"
+                 list="people" placeholder="Assign" aria-label="Assigned to"
+                 onchange="this.form.submit()">
+        </form>
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('turnover_update_item', item_id=item.id) }}" class="cellform">
+          <select name="status" aria-label="Progress" onchange="this.form.submit()">
+            <option value="todo" {% if item.status == 'todo' %}selected{% endif %}>To do</option>
+            <option value="assigned" {% if item.status == 'assigned' %}selected{% endif %}>Assigned</option>
+            <option value="doing" {% if item.status == 'doing' %}selected{% endif %}>Doing</option>
+            <option value="blocked" {% if item.status == 'blocked' %}selected{% endif %}>Blocked</option>
+            <option value="done" {% if item.status == 'done' %}selected{% endif %}>Done</option>
+          </select>
+        </form>
+      </td>
+      <td class="num">{% if item.estimate_cents %}{{ item.estimate_cents | money }}{% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('turnover_update_item', item_id=item.id) }}" class="cellform">
+          <input type="hidden" name="delete" value="1">
+          <button class="linky danger" type="submit" aria-label="Remove {{ item.item }}">✕</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<datalist id="people">
+  {% for person in people %}<option value="{{ person }}">{% endfor %}
+</datalist>
+{% else %}
+<div class="empty-state">
+  <p><strong>Nothing on the list yet.</strong></p>
+  <p>Walk the unit and add what you find.</p>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_for('turnover_add_item', turnover_id=turn.id) }}" class="stack boxform">
+  <h2 class="section">Add an item</h2>
+  <label>
+    What needs doing
+    <input type="text" name="item" placeholder="Patch and paint bedroom wall" required>
+  </label>
+  <div class="pair">
+    <label>
+      Area
+      <input type="text" name="area" placeholder="Bedroom 2" list="areas">
+    </label>
+    <label>
+      Priority
+      <select name="priority">
+        <option value="1">Blocker</option>
+        <option value="2">Important</option>
+        <option value="3" selected>Normal</option>
+        <option value="4">If time</option>
+      </select>
+    </label>
+  </div>
+  <div class="pair">
+    <label>
+      Quantity
+      <input type="text" name="quantity" inputmode="decimal" placeholder="12">
+    </label>
+    <label>
+      Unit
+      <input type="text" name="unit_label" placeholder="sq yd">
+    </label>
+  </div>
+  <div class="pair">
+    <label>
+      Assign to
+      <input type="text" name="assigned_to" list="people" placeholder="Who's doing it">
+    </label>
+    <label>
+      Estimate
+      <input type="text" name="estimate" inputmode="decimal" placeholder="250">
+    </label>
+  </div>
+  <label class="check">
+    <input type="checkbox" name="tenant_chargeable" value="1">
+    Beyond normal wear, charge the tenant
+    <span class="help">Marked items total up for the deposit statement.</span>
+  </label>
+  <button class="action wide" type="submit">Add to list</button>
+</form>
+
+<datalist id="areas">
+  <option value="Kitchen"><option value="Bathroom"><option value="Bedroom 1">
+  <option value="Bedroom 2"><option value="Living room"><option value="Whole unit">
+  <option value="Exterior"><option value="Safety">
+</datalist>
+
+{% if by_assignee %}
+<h2 class="section">Open work by person</h2>
+{% for person, rows in by_assignee.items() %}
+<div class="assignee">
+  <h3>{{ person }} <span class="sub">{{ rows | length }} item{{ '' if rows | length == 1 else 's' }}</span></h3>
+  <ul class="plain">
+    {% for row in rows %}
+    <li>{{ row.item }} <span class="sub">{{ row.area }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
